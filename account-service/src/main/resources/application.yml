@@ -1,0 +1,37 @@
+server:
+  # Account service port (default 8081, SERVER_PORT env var se override kar sakte hain)
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: account-service
+
+  datasource:
+    # PostgreSQL connection URL (Docker container 5432 port pe map hai)
+    url: jdbc:postgresql://localhost:5432/account_db
+    # DB username environment variable se aayega, default "postgres" rahega
+    username: ${DB_USERNAME:postgres}
+    # DB password sirf environment variable se aayega (koi default nahi, security ke liye)
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    # SQL queries console pe dikhane ke liye
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    hibernate:
+      # ddl-auto update: Learning ke liye tables automatically ban jayengi/update ho jayengi.
+      # Production me Flyway/Liquibase migration scripts use karte hain.
+      ddl-auto: update
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Actuator endpoints open taaki health status check kar sakein
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
