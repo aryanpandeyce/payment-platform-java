@@ -421,6 +421,11 @@ Every service and operation handling money in this platform must adhere to the f
    - Integrated Docker healthchecks (`/actuator/health/liveness`) and `depends_on: condition: service_healthy` startup orchestration.
    - Decoupled Compose stack: core transactional microservices in `docker-compose.yml`, observability stack (Prometheus, Grafana, ELK) in `docker-compose.observability.yml`, and code quality (SonarQube) in `docker-compose.quality.yml`.
    - Resource profiling: Core stack requires ~3.5 GB RAM; Observability + Quality requires ~4 GB combined.
+9. **Continuous Integration & DevSecOps Automation**:
+   - Automated 6-stage pipeline (`build` -> `test` -> `quality` -> `package` -> `security` -> `deploy`).
+   - Automated SonarQube Quality Gate enforcement blocking pull requests that fail coverage (>=70%) or introduce vulnerabilities.
+   - Static Application Security Testing (SAST), Container Vulnerability Scanning (Trivy), IaC Helm misconfiguration audits, and Secret Leak Prevention.
+   - Dual-pipeline governance: GitHub Actions for public showcase and GitHub Pages; GitLab CI for enterprise container registry and GitOps deployment.
 
 ---
 

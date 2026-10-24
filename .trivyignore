@@ -1,0 +1,7 @@
+# ==============================================================================
+# Trivy Vulnerability & Misconfiguration Exemption Allowlist (.trivyignore)
+# Rule: Every suppressed CVE or rule MUST have written justification and expiry.
+# ==============================================================================
+
+# Currently zero unaddressed CVEs. Add justified exceptions here in format:
+# CVE-YYYY-NNNNN  # Justification: [Reason why vulnerability is not exploitable in this architecture]

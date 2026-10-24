@@ -17,17 +17,8 @@ concurrency:
 
 jobs:
   backend-test:
-    name: Build & Test (${{ matrix.service }})
+    name: Build & Test Multi-Module Backend (Java 21)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - account-service
-          - payment-service
-          - fraud-service
-          - notification-service
-          - api-gateway
 
     steps:
       - name: Checkout repository
@@ -38,15 +29,13 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'maven'
 
       - name: Make Maven wrapper executable
-        run: |
-          chmod +x ./mvnw || true
-          chmod +x ${{ matrix.service }}/mvnw || true
+        run: chmod +x ./mvnw
 
-      - name: Run Maven Tests for ${{ matrix.service }}
-        working-directory: ${{ matrix.service }}
-        run: ./mvnw test -B
+      - name: Run Maven Multi-Module Build & Tests
+        run: ./mvnw clean test -B
         env:
           JAVA_TOOL_OPTIONS: "-Duser.timezone=Asia/Kolkata"
 
@@ -62,6 +51,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
 
       - name: Install dependencies
         working-directory: frontend

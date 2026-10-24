@@ -1,0 +1,291 @@
+# ==============================================================================
+# ApexPay GitLab CI/CD Pipeline (DevSecOps Free Tier)
+# Stages: build -> test -> quality -> package -> security -> deploy
+# ==============================================================================
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_DRIVER: overlay2
+  TRIVY_NO_PROGRESS: "true"
+  TRIVY_CACHE_DIR: ".trivycache/"
+
+default:
+  image: maven:3.9.9-eclipse-temurin-21-alpine
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}"
+    paths:
+      - .m2/repository
+      - frontend/node_modules/
+      - .trivycache/
+
+stages:
+  - build
+  - test
+  - quality
+  - package
+  - security
+  - deploy
+
+# ==========================================
+# 1. BUILD STAGE
+# ==========================================
+
+compile-backend:
+  stage: build
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS clean compile test-compile
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - "**/target/classes"
+      - "**/target/test-classes"
+
+compile-frontend:
+  stage: build
+  image: node:22.14.0-alpine3.21
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - frontend/dist
+
+# ==========================================
+# 2. TEST STAGE
+# ==========================================
+
+unit-tests:
+  stage: test
+  needs: ["compile-backend"]
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS test
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit:
+        - "**/target/surefire-reports/TEST-*.xml"
+    paths:
+      - "**/target/site/jacoco/jacoco.xml"
+      - "**/target/surefire-reports/"
+
+integration-tests:
+  stage: test
+  needs: ["compile-backend"]
+  image: maven:3.9.9-eclipse-temurin-21-alpine
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+      command: ["--tls=false"]
+  variables:
+    TESTCONTAINERS_HOST_OVERRIDE: "docker"
+  script:
+    - ./mvnw $MAVEN_CLI_OPTS verify -DskipUnitTests=true
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit:
+        - "**/target/failsafe-reports/TEST-*.xml"
+    paths:
+      - "**/target/failsafe-reports/"
+
+# ==========================================
+# 3. QUALITY STAGE (SonarQube)
+# ==========================================
+
+sonarqube-check:
+  stage: quality
+  needs: ["unit-tests"]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script:
+    - >
+      ./mvnw $MAVEN_CLI_OPTS sonar:sonar
+      -Dsonar.host.url="${SONAR_HOST_URL}"
+      -Dsonar.token="${SONAR_TOKEN}"
+      -Dsonar.qualitygate.wait=true
+      -Dsonar.coverage.jacoco.xmlReportPaths="identity-service/target/site/jacoco/jacoco.xml,account-service/target/site/jacoco/jacoco.xml,payment-service/target/site/jacoco/jacoco.xml,fraud-service/target/site/jacoco/jacoco.xml,notification-service/target/site/jacoco/jacoco.xml,api-gateway/target/site/jacoco/jacoco.xml,common/target/site/jacoco/jacoco.xml"
+  rules:
+    - if: $SONAR_TOKEN
+      when: on_success
+    - when: manual
+      allow_failure: true
+
+# ==========================================
+# 4. PACKAGE STAGE (Kaniko / Docker Build)
+# ==========================================
+
+.build-docker:
+  stage: package
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        TAG_LATEST: "--destination ${CI_REGISTRY_IMAGE}/${SERVICE_NAME}:latest"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+        TAG_LATEST: ""
+
+package-identity:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "identity-service"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/identity-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/identity-service:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-account:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "account-service"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/account-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/account-service:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-payment:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "payment-service"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/payment-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/payment-service:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-fraud:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "fraud-service"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/fraud-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/fraud-service:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-notification:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "notification-service"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/notification-service/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/notification-service:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-gateway:
+  extends: .build-docker
+  needs: ["compile-backend"]
+  variables:
+    SERVICE_NAME: "api-gateway"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/api-gateway/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/api-gateway:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+package-frontend:
+  extends: .build-docker
+  needs: ["compile-frontend"]
+  variables:
+    SERVICE_NAME: "frontend"
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}/frontend"
+      --dockerfile "${CI_PROJECT_DIR}/frontend/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}/frontend:${CI_COMMIT_SHORT_SHA}"
+      ${TAG_LATEST}
+
+# ==========================================
+# 5. SECURITY STAGE (Trivy & Secret Audit)
+# ==========================================
+
+trivy-filesystem-and-iac:
+  stage: security
+  image:
+    name: aquasec/trivy:0.59.1
+    entrypoint: [""]
+  needs: []
+  script:
+    - mkdir -p reports
+    # Scan filesystem dependencies
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --ignorefile .trivyignore --format table --exit-code 1 .
+    # Scan IaC Helm templates & Dockerfiles
+    - trivy config --severity HIGH,CRITICAL --format table --exit-code 0 deploy/
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - reports/
+
+secret-scan:
+  stage: security
+  image:
+    name: aquasec/trivy:0.59.1
+    entrypoint: [""]
+  needs: []
+  script:
+    - trivy fs --scanners secret --exit-code 1 .
+
+# ==========================================
+# 6. DEPLOY STAGE (Helm / Kubernetes)
+# ==========================================
+
+deploy-to-cluster:
+  stage: deploy
+  image: dtzar/helm-kubectl:3.17.0
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  script:
+    - echo "Deploying ApexPay Helm umbrella chart to Kubernetes / local kind..."
+    - helm lint deploy/helm/payment-platform
+    - >
+      helm upgrade --install apexpay deploy/helm/payment-platform
+      --namespace payment-platform --create-namespace
+      --values deploy/helm/payment-platform/values-dev.yaml
+      --set global.imageTag="${CI_COMMIT_SHORT_SHA}"
