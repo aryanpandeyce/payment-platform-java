@@ -1,18 +1,18 @@
 server:
-  # Account service port (default 8081, SERVER_PORT env var se override kar sakte hain)
-  port: ${SERVER_PORT:8081}
+  # Account service port (default 8085 as per SSD/specs)
+  port: ${SERVER_PORT:8085}
 
 spring:
   application:
     name: account-service
 
   datasource:
-    # PostgreSQL connection URL (Docker container 5432 port pe map hai)
-    url: jdbc:postgresql://localhost:5432/account_db
-    # DB username environment variable se aayega, default "postgres" rahega
-    username: ${DB_USERNAME:postgres}
-    # DB password sirf environment variable se aayega (koi default nahi, security ke liye)
-    password: ${DB_PASSWORD}
+    # PostgreSQL connection URL (Docker container 5433 port pe map hai)
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/account_db}
+    # DB username environment variable se aayega, default "payments" rahega
+    username: ${DB_USERNAME:payments}
+    # DB password environment variable se aayega
+    password: ${DB_PASSWORD:root}
     driver-class-name: org.postgresql.Driver
 
   jpa:

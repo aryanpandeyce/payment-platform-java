@@ -1,0 +1,17 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: account-service-test
+  datasource:
+    # Test ke liye in-memory H2 database (PostgreSQL compatibility mode)
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false

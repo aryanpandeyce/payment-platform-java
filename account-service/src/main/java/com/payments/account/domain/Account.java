@@ -38,6 +38,12 @@ public class Account {
     @Version
     private Long version;
 
+    @Column(name = "currency", nullable = false)
+    private String currency = "INR";
+
+    @Column(name = "status", nullable = false)
+    private String status = "ACTIVE";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -46,8 +52,13 @@ public class Account {
     protected Account() {
     }
 
-    // Public constructor: Business rule enforce karta hai ki account banate waqt owner name aur valid initial balance hona zaroori hai.
+    // Public constructor: default currency INR
     public Account(String ownerName, BigDecimal initialBalance) {
+        this(ownerName, initialBalance, "INR");
+    }
+
+    // Overloaded constructor: currency customize karne ke liye
+    public Account(String ownerName, BigDecimal initialBalance, String currency) {
         if (ownerName == null || ownerName.trim().isEmpty()) {
             throw new IllegalArgumentException("Owner name cannot be empty");
         }
@@ -59,6 +70,8 @@ public class Account {
         this.ownerName = ownerName.trim();
         // Scale 2 decimal places enforce kar rahe hain banker's rounding ke sath
         this.balance = initialBalance.setScale(2, RoundingMode.HALF_EVEN);
+        this.currency = (currency == null || currency.trim().isEmpty()) ? "INR" : currency.trim().toUpperCase();
+        this.status = "ACTIVE";
         this.createdAt = Instant.now();
     }
 
@@ -97,6 +110,14 @@ public class Account {
 
     public Long getVersion() {
         return version;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public String getStatus() {
+        return status;
     }
 
     public Instant getCreatedAt() {
