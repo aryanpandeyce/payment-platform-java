@@ -50,3 +50,26 @@ Every file created in the project and the reason it exists.
 - `payment-service/src/test/java/com/payments/payment/domain/PaymentTest.java`: Unit tests verifying state machine transitions, terminal state enforcement, and financial invariants.
 - `payment-service/src/test/java/com/payments/payment/PaymentServiceApplicationTests.java`: Context loading smoke test for payment service.
 - `payment-service/src/test/java/com/payments/payment/controller/PaymentControllerIntegrationTest.java`: Integration tests verifying FR-5, FR-6, idempotency reuse, mismatch conflict, and outbox persistence.
+
+## Phase 3: the event flow (FR-8..11)
+- `fraud-service/pom.xml`: Maven build file for fraud service with Kafka integration.
+- `fraud-service/src/main/resources/application.yml`: Configuration for fraud service on port 8087 with Kafka and configurable limits.
+- `fraud-service/src/test/resources/application.yml`: Test configuration for fraud service.
+- `fraud-service/src/main/java/com/payments/fraud/FraudServiceApplication.java`: Main entry point for fraud service.
+- `fraud-service/src/main/java/com/payments/fraud/config/FraudProperties.java`: Externalized configuration for max transfer amount (₹50,000) and velocity window (5 transfers/min).
+- `fraud-service/src/main/java/com/payments/fraud/service/FraudCheckResult.java`: Outcome model carrying validation pass/fail status and rejection reason.
+- `fraud-service/src/main/java/com/payments/fraud/service/FraudCheckService.java`: Rule engine performing amount threshold and sliding 1-minute velocity checks.
+- `fraud-service/src/main/java/com/payments/fraud/event/PaymentInitiatedEvent.java`: DTO deserializing payment-initiated events.
+- `fraud-service/src/main/java/com/payments/fraud/event/PaymentValidatedEvent.java`: DTO publishing passed fraud checks to `payment-validated`.
+- `fraud-service/src/main/java/com/payments/fraud/event/PaymentFailedEvent.java`: DTO publishing failed fraud checks to `payment-failed`.
+- `fraud-service/src/main/java/com/payments/fraud/listener/FraudEventListener.java`: Idempotent Kafka listener consuming `payment-initiated` and routing to validated/failed topics.
+- `fraud-service/src/test/java/com/payments/fraud/service/FraudCheckServiceTest.java`: Unit tests verifying FR-8 (amount limit) and FR-9 (velocity limit) acceptance criteria.
+- `fraud-service/src/test/java/com/payments/fraud/FraudServiceApplicationTests.java`: Context loading smoke test for fraud service.
+- `account-service/src/main/java/com/payments/account/event/PaymentValidatedEvent.java`: Event model for incoming settlement requests.
+- `account-service/src/main/java/com/payments/account/event/PaymentSettledEvent.java`: Event model publishing successful atomic balance settlement.
+- `account-service/src/main/java/com/payments/account/event/PaymentFailedEvent.java`: Event model publishing settlement failure reasons (e.g. insufficient funds, missing account).
+- `account-service/src/main/java/com/payments/account/listener/SettlementEventListener.java`: Idempotent consumer executing atomic sender debit and receiver credit with compensation handling.
+- `payment-service/src/main/java/com/payments/payment/event/PaymentValidatedEvent.java`: Event model for validated status updates.
+- `payment-service/src/main/java/com/payments/payment/event/PaymentSettledEvent.java`: Event model for settled status updates.
+- `payment-service/src/main/java/com/payments/payment/event/PaymentFailedEvent.java`: Event model for failed status updates.
+- `payment-service/src/main/java/com/payments/payment/listener/PaymentStatusEventListener.java`: Idempotent consumer advancing payment state machine to VALIDATED, SETTLED, or FAILED.

@@ -22,6 +22,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.kafka.core.KafkaTemplate;
+
 // @SpringBootTest: Full Spring Application context load karta hai
 // @AutoConfigureMockMvc: Mock HTTP requests dispatch karne ke liye MockMvc bean provide karta hai
 @SpringBootTest
@@ -33,6 +36,9 @@ class AccountControllerIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockBean
+    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Test
     @DisplayName("FR-1: POST /api/accounts creates new account with 201 Created")

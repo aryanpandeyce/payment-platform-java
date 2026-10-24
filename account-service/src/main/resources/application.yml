@@ -22,9 +22,18 @@ spring:
       hibernate:
         format_sql: true
     hibernate:
-      # ddl-auto update: Learning ke liye tables automatically ban jayengi/update ho jayengi.
-      # Production me Flyway/Liquibase migration scripts use karte hain.
       ddl-auto: update
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: account-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 management:
   endpoints:

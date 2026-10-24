@@ -1,0 +1,13 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: fraud-service-test
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+fraud:
+  max-amount: 50000.00
+  max-velocity-per-minute: 5

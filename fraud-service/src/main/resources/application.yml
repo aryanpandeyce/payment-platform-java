@@ -1,0 +1,30 @@
+server:
+  # Fraud service port 8087 as per SSD/specs
+  port: ${SERVER_PORT:8087}
+
+spring:
+  application:
+    name: fraud-service
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: fraud-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+fraud:
+  # FR-8: Configurable maximum amount limit (default: 50,000.00 INR)
+  max-amount: ${FRAUD_MAX_AMOUNT:50000.00}
+  # FR-9: Configurable velocity window limit (default: 5 transfers per minute)
+  max-velocity-per-minute: ${FRAUD_MAX_VELOCITY:5}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
