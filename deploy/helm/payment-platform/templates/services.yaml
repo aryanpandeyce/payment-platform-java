@@ -1,0 +1,135 @@
+{{/*
+ClusterIP Services for ApexPay
+*/}}
+{{- if .Values.identityService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  labels:
+    app.kubernetes.io/name: identity-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.identityService.port }}
+      targetPort: {{ .Values.identityService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: identity-service
+---
+{{- end }}
+{{- if .Values.accountService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  labels:
+    app.kubernetes.io/name: account-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.accountService.port }}
+      targetPort: {{ .Values.accountService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: account-service
+---
+{{- end }}
+{{- if .Values.paymentService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  labels:
+    app.kubernetes.io/name: payment-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.paymentService.port }}
+      targetPort: {{ .Values.paymentService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: payment-service
+---
+{{- end }}
+{{- if .Values.fraudService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-service
+  labels:
+    app.kubernetes.io/name: fraud-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.fraudService.port }}
+      targetPort: {{ .Values.fraudService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: fraud-service
+---
+{{- end }}
+{{- if .Values.notificationService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.notificationService.port }}
+      targetPort: {{ .Values.notificationService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: notification-service
+---
+{{- end }}
+{{- if .Values.apiGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.apiGateway.port }}
+      targetPort: {{ .Values.apiGateway.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: api-gateway
+---
+{{- end }}
+{{- if .Values.frontend.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.frontend.port }}
+      targetPort: {{ .Values.frontend.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: frontend
+{{- end }}

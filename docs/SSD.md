@@ -426,6 +426,11 @@ Every service and operation handling money in this platform must adhere to the f
    - Automated SonarQube Quality Gate enforcement blocking pull requests that fail coverage (>=70%) or introduce vulnerabilities.
    - Static Application Security Testing (SAST), Container Vulnerability Scanning (Trivy), IaC Helm misconfiguration audits, and Secret Leak Prevention.
    - Dual-pipeline governance: GitHub Actions for public showcase and GitHub Pages; GitLab CI for enterprise container registry and GitOps deployment.
+10. **Kubernetes Orchestration & OpenShift Enterprise Compatibility**:
+   - Helm umbrella chart (`deploy/helm/payment-platform`) with declarative per-environment values (`values-dev.yaml`, `values-prod-like.yaml`).
+   - Production-grade Kubernetes primitives: Deployments, Services, ConfigMaps, Secrets, HorizontalPodAutoscalers (HPA), and PodDisruptionBudgets (PDB).
+   - Zero-trust NetworkPolicy architecture: Default deny ingress with explicit ingress whitelist rules (Ingress -> Gateway -> Microservices -> Data Stores).
+   - OpenShift `restricted-v2` Security Context Constraint (SCC) compliance: non-root execution (`runAsNonRoot: true`), arbitrary user ID tolerance (`runAsUser` omitted or randomized), `allowPrivilegeEscalation: false`, and `readOnlyRootFilesystem: true` with temporary in-memory volume mounts for `/tmp`.
 
 ---
 

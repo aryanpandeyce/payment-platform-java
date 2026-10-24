@@ -1,0 +1,88 @@
+# Development environment configuration for local kind cluster
+global:
+  imageTag: "latest"
+  imagePullPolicy: "Never" # Loads directly from local Docker daemon into kind
+  registry: "apexpay"
+
+infra:
+  deployStateful: true
+
+ingress:
+  enabled: true
+  host: "localhost"
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+identityService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+accountService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+paymentService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+fraudService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+notificationService:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+apiGateway:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "192Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
+    limits:
+      cpu: "100m"
+      memory: "64Mi"

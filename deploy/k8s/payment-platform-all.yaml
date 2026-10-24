@@ -1,0 +1,1193 @@
+﻿---
+# Source: payment-platform/templates/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Source: payment-platform/templates/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-edge
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["api-gateway", "frontend"]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8090
+        - protocol: TCP
+          port: 80
+---
+# Source: payment-platform/templates/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-microservices
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["identity-service", "account-service", "payment-service", "notification-service"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8084
+        - protocol: TCP
+          port: 8085
+        - protocol: TCP
+          port: 8086
+        - protocol: TCP
+          port: 8088
+---
+# Source: payment-platform/templates/network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-microservices-to-infra
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["postgres", "kafka", "mongo"]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: ["identity-service", "account-service", "payment-service", "fraud-service", "notification-service"]
+---
+# Source: payment-platform/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apexpay-secrets
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+type: Opaque
+data:
+  POSTGRES_PASSWORD: "cm9vdA=="
+  MONGO_PASSWORD: "Y2hhbmdlX21l"
+  JWT_SECRET: "c3VwZXJzZWNyZXRqd3RrZXl0aGF0aXNhdGxlYXN0MjU2Yml0c2xvbmdmb3JobWFjc2hhMjU2c2lnbmluZw=="
+  SEED_ADMIN_PASSWORD: "QWRtaW5AQXBleFBheTIwMjYh"
+  SEED_USER_PASSWORD: "VXNlckBBcGV4UGF5MjAyNiE="
+---
+# Source: payment-platform/templates/configmaps.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apexpay-config
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+data:
+  DB_POSTGRES_HOST: "postgres"
+  DB_POSTGRES_PORT: "5432"
+  DB_POSTGRES_USER: "payments"
+  MONGO_HOST: "mongo"
+  MONGO_PORT: "27017"
+  MONGO_USER: "audit"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  FRAUD_MAX_AMOUNT: "50000.00"
+  FRAUD_MAX_VELOCITY: "5"
+  CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000,http://localhost"
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+data:
+  init.sql: |
+    CREATE DATABASE identity_db;
+    CREATE DATABASE account_db;
+    CREATE DATABASE payment_db;
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    app.kubernetes.io/name: mongo
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 27017
+      targetPort: 27017
+      name: mongo
+  selector:
+    app.kubernetes.io/name: mongo
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: kafka
+  selector:
+    app.kubernetes.io/name: kafka
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  labels:
+    app.kubernetes.io/name: identity-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8084
+      targetPort: 8084
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: identity-service
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: account-service
+  labels:
+    app.kubernetes.io/name: account-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8085
+      targetPort: 8085
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: account-service
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  labels:
+    app.kubernetes.io/name: payment-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8086
+      targetPort: 8086
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: payment-service
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-service
+  labels:
+    app.kubernetes.io/name: fraud-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8087
+      targetPort: 8087
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: fraud-service
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8088
+      targetPort: 8088
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: notification-service
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: 8090
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: api-gateway
+---
+# Source: payment-platform/templates/services.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: frontend
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  labels:
+    app.kubernetes.io/name: identity-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity-service
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: identity-service
+          image: "apexpay/identity-service:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8084
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+            - name: DB_URL
+              value: "jdbc:postgresql://postgres:5432/identity_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: JWT_SECRET
+            - name: SEED_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: SEED_ADMIN_PASSWORD
+            - name: SEED_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: SEED_USER_PASSWORD
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8084
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+  labels:
+    app.kubernetes.io/name: account-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: account-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: account-service
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: account-service
+          image: "apexpay/account-service:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8085
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8085"
+            - name: DB_URL
+              value: "jdbc:postgresql://postgres:5432/account_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: POSTGRES_PASSWORD
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8085
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8085
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  labels:
+    app.kubernetes.io/name: payment-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-service
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: payment-service
+          image: "apexpay/payment-service:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8086
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8086"
+            - name: DB_URL
+              value: "jdbc:postgresql://postgres:5432/payment_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: POSTGRES_PASSWORD
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8086
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-service
+  labels:
+    app.kubernetes.io/name: fraud-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fraud-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fraud-service
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fraud-service
+          image: "apexpay/fraud-service:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8087
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8087"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: FRAUD_MAX_AMOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: FRAUD_MAX_AMOUNT
+            - name: FRAUD_MAX_VELOCITY
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: FRAUD_MAX_VELOCITY
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8087
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8087
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-service
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notification-service
+          image: "apexpay/notification-service:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8088
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8088"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: MONGO_URI
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mongo:27017/audit_db?authSource=admin"
+            - name: MONGO_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: MONGO_USER
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: MONGO_PASSWORD
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8088
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8088
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-gateway
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api-gateway
+          image: "apexpay/api-gateway:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8090
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: SERVER_PORT
+              value: "8090"
+            - name: IDENTITY_SERVICE_URL
+              value: "http://identity-service:8084"
+            - name: ACCOUNT_SERVICE_URL
+              value: "http://account-service:8085"
+            - name: PAYMENT_SERVICE_URL
+              value: "http://payment-service:8086"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "http://notification-service:8088"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: JWT_SECRET
+            - name: CORS_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: CORS_ALLOWED_ORIGINS
+          resources:
+            limits:
+              cpu: 300m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 192Mi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8090
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8090
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+---
+# Source: payment-platform/templates/deployments.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: "apexpay/frontend:latest"
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+              name: http
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 25m
+              memory: 32Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16.8-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "postgres"
+          volumeMounts:
+            - name: pg-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init-script
+          configMap:
+            name: postgres-init-script
+  volumeClaimTemplates:
+    - metadata:
+        name: pg-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  labels:
+    app.kubernetes.io/name: mongo
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongo
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7.0.17
+          ports:
+            - containerPort: 27017
+              name: mongo
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: MONGO_USER
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: MONGO_PASSWORD
+          volumeMounts:
+            - name: mongo-storage
+              mountPath: /data/db
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Source: payment-platform/templates/infra.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        helm.sh/chart: payment-platform-0.1.0
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: apexpay-platform
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.0
+          ports:
+            - containerPort: 9092
+              name: kafka
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: "broker,controller"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:9092"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: "CONTROLLER"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "PLAINTEXT"
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9093"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+          volumeMounts:
+            - name: kafka-storage
+              mountPath: /tmp/kraft-combined-logs
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Source: payment-platform/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apexpay-ingress
+  labels:
+    helm.sh/chart: payment-platform-0.1.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: apexpay-platform
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "localhost"
+      http:
+        paths:
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8090
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8090
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

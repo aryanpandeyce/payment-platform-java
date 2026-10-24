@@ -1,0 +1,531 @@
+{{/*
+Deployments for ApexPay Microservices and Frontend
+*/}}
+{{- if .Values.identityService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  labels:
+    app.kubernetes.io/name: identity-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.identityService.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity-service
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: identity-service
+          image: "{{ .Values.global.registry }}/{{ .Values.identityService.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.identityService.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.identityService.port | quote }}
+            - name: DB_URL
+              value: "jdbc:postgresql://{{ .Values.infra.postgres.host }}:{{ .Values.infra.postgres.port }}/identity_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.postgres.passwordSecretName }}
+                  key: {{ .Values.infra.postgres.passwordSecretKey }}
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.jwt.secretName }}
+                  key: {{ .Values.infra.jwt.secretKey }}
+            - name: SEED_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: SEED_ADMIN_PASSWORD
+            - name: SEED_USER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: apexpay-secrets
+                  key: SEED_USER_PASSWORD
+          resources:
+            {{- toYaml .Values.identityService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.identityService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.identityService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.accountService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: account-service
+  labels:
+    app.kubernetes.io/name: account-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.accountService.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: account-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: account-service
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: account-service
+          image: "{{ .Values.global.registry }}/{{ .Values.accountService.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.accountService.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.accountService.port | quote }}
+            - name: DB_URL
+              value: "jdbc:postgresql://{{ .Values.infra.postgres.host }}:{{ .Values.infra.postgres.port }}/account_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.postgres.passwordSecretName }}
+                  key: {{ .Values.infra.postgres.passwordSecretKey }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            {{- toYaml .Values.accountService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.accountService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.accountService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.paymentService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  labels:
+    app.kubernetes.io/name: payment-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.paymentService.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-service
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: payment-service
+          image: "{{ .Values.global.registry }}/{{ .Values.paymentService.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.paymentService.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.paymentService.port | quote }}
+            - name: DB_URL
+              value: "jdbc:postgresql://{{ .Values.infra.postgres.host }}:{{ .Values.infra.postgres.port }}/payment_db"
+            - name: DB_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: DB_POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.postgres.passwordSecretName }}
+                  key: {{ .Values.infra.postgres.passwordSecretKey }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+          resources:
+            {{- toYaml .Values.paymentService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.paymentService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.paymentService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.fraudService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-service
+  labels:
+    app.kubernetes.io/name: fraud-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.fraudService.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fraud-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fraud-service
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fraud-service
+          image: "{{ .Values.global.registry }}/{{ .Values.fraudService.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.fraudService.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.fraudService.port | quote }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: FRAUD_MAX_AMOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: FRAUD_MAX_AMOUNT
+            - name: FRAUD_MAX_VELOCITY
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: FRAUD_MAX_VELOCITY
+          resources:
+            {{- toYaml .Values.fraudService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.fraudService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.fraudService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.notificationService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app.kubernetes.io/name: notification-service
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.notificationService.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notification-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notification-service
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notification-service
+          image: "{{ .Values.global.registry }}/{{ .Values.notificationService.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.notificationService.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.notificationService.port | quote }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: MONGO_URI
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@{{ .Values.infra.mongo.host }}:{{ .Values.infra.mongo.port }}/audit_db?authSource=admin"
+            - name: MONGO_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: MONGO_USER
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.mongo.passwordSecretName }}
+                  key: {{ .Values.infra.mongo.passwordSecretKey }}
+          resources:
+            {{- toYaml .Values.notificationService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.notificationService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.notificationService.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.apiGateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app.kubernetes.io/name: api-gateway
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.apiGateway.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-gateway
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api-gateway
+          image: "{{ .Values.global.registry }}/{{ .Values.apiGateway.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.apiGateway.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.apiGateway.port | quote }}
+            - name: IDENTITY_SERVICE_URL
+              value: "http://identity-service:{{ .Values.identityService.port }}"
+            - name: ACCOUNT_SERVICE_URL
+              value: "http://account-service:{{ .Values.accountService.port }}"
+            - name: PAYMENT_SERVICE_URL
+              value: "http://payment-service:{{ .Values.paymentService.port }}"
+            - name: NOTIFICATION_SERVICE_URL
+              value: "http://notification-service:{{ .Values.notificationService.port }}"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.jwt.secretName }}
+                  key: {{ .Values.infra.jwt.secretKey }}
+            - name: CORS_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: apexpay-config
+                  key: CORS_ALLOWED_ORIGINS
+          resources:
+            {{- toYaml .Values.apiGateway.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.apiGateway.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.apiGateway.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+{{- end }}
+---
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    {{- include "payment-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        {{- include "payment-platform.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: "{{ .Values.global.registry }}/{{ .Values.frontend.image }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.frontend.port }}
+              name: http
+          securityContext:
+            {{- include "payment-platform.securityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ .Values.frontend.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+{{- end }}

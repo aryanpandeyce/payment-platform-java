@@ -1,0 +1,151 @@
+global:
+  imageTag: "0.0.1-SNAPSHOT"
+  imagePullPolicy: "IfNotPresent"
+  registry: "apexpay"
+
+# Environment & Infrastructure Connections
+infra:
+  deployStateful: false
+  postgres:
+    host: "postgres"
+    port: 5432
+    username: "payments"
+    passwordSecretName: "apexpay-secrets"
+    passwordSecretKey: "POSTGRES_PASSWORD"
+  mongo:
+    host: "mongo"
+    port: 27017
+    username: "audit"
+    passwordSecretName: "apexpay-secrets"
+    passwordSecretKey: "MONGO_PASSWORD"
+  kafka:
+    bootstrapServers: "kafka:9092"
+  jwt:
+    secretName: "apexpay-secrets"
+    secretKey: "JWT_SECRET"
+
+secrets:
+  postgresPassword: "root"
+  mongoPassword: "change_me"
+  jwtSecret: "supersecretjwtkeythatisatleast256bitslongforhmacsha256signing"
+  seedAdminPassword: "Admin@ApexPay2026!"
+  seedUserPassword: "User@ApexPay2026!"
+
+# Service Configurations
+identityService:
+  enabled: true
+  replicaCount: 1
+  port: 8084
+  image: "identity-service"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+accountService:
+  enabled: true
+  replicaCount: 1
+  port: 8085
+  image: "account-service"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+paymentService:
+  enabled: true
+  replicaCount: 1
+  port: 8086
+  image: "payment-service"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+fraudService:
+  enabled: true
+  replicaCount: 1
+  port: 8087
+  image: "fraud-service"
+  maxAmount: "50000.00"
+  maxVelocity: "5"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+notificationService:
+  enabled: true
+  replicaCount: 1
+  port: 8088
+  image: "notification-service"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+apiGateway:
+  enabled: true
+  replicaCount: 1
+  port: 8090
+  image: "api-gateway"
+  corsAllowedOrigins: "http://localhost:5173,http://localhost:3000,http://localhost"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  port: 80
+  image: "frontend"
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+# Ingress Controller (ingress-nginx)
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+  host: "localhost"
+
+# Zero-Trust Network Policies
+networkPolicy:
+  enabled: true
+
+# Horizontal Pod Autoscaling (HPA)
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+# Pod Disruption Budget (PDB)
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
