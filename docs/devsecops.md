@@ -134,7 +134,57 @@ The Spring Cloud API Gateway (Port 8090) enforces defence-in-depth:
 ## 5. Observability & Logging Access
 
 When the observability stack is launched (`docker compose -f docker-compose.observability.yml up -d`):
-- **Grafana**: `http://localhost:3000` (admin / admin)
+- **Grafana**: `http://localhost:3000` (credentials: `admin` / `admin`)
+  - Dashboards available under folder `ApexPay`:
+    - `ApexPay — Platform Overview` (HTTP traffic, p95 latency, 5xx errors, JVM memory, HikariCP pools)
+    - `ApexPay — Payments Business Operations` (Initiated/Settled volumes, success rate, failure reasons, outbox lag, DLT counts)
+    - `ApexPay — Kafka and Consumers Dashboard` (Throughput, listener duration, DLT rate)
 - **Kibana**: `http://localhost:5601`
+  - Pre-created Data View: `apexpay-*`
+  - Saved Search: `ApexPay Correlation Tracing and Errors`
 - **Prometheus**: `http://localhost:9090`
+  - Pre-configured alert rules: `ServiceDown`, `PaymentHighErrorRate`, `OutboxPendingBacklog`, `KafkaDLTDetected`
 - **Elasticsearch API**: `http://localhost:9200`
+
+---
+
+## 6. Deploying to Local Kind Cluster
+
+We provide automated PowerShell scripts to spin up, deploy, and verify the platform on a local Kubernetes Kind cluster.
+
+### Step 1: Create Kind Cluster with Ingress
+```powershell
+.\scripts\kind-up.ps1
+```
+This script:
+1. Provisions a single-node cluster named `apexpay-cluster` with port mappings `80:80` and `443:443`.
+2. Installs the official `ingress-nginx` controller for Kind.
+3. Loads all locally built microservice container images into the Kind node.
+
+### Step 2: Deploy Helm Umbrella Chart
+```powershell
+.\scripts\deploy.ps1
+```
+Deploys `deploy/helm/payment-platform` with `values-dev.yaml` into the `apexpay` namespace.
+
+### Step 3: Run End-to-End Smoke Test
+```powershell
+.\scripts\smoke-test.ps1
+```
+Authenticates as Admin Aryan Pandey, verifies `/api/users/me`, switches to user `rahul.sharma`, and initiates an idempotent money transfer.
+
+### Step 4: Teardown
+```powershell
+.\scripts\kind-down.ps1
+```
+
+---
+
+## 7. OpenShift Enterprise Compliance (Restricted SCC)
+
+Enterprise banking environments running Red Hat OpenShift enforce `restricted-v2` Security Context Constraints (SCC). The ApexPay deployment manifests adhere to these guidelines:
+1. **Non-Root Execution**: `runAsNonRoot: true` is enforced across all pods.
+2. **Arbitrary UID Tolerance**: The Temurin JRE containers run under arbitrary UIDs assigned by OpenShift without requiring fixed root IDs.
+3. **Privilege Escalation Prevention**: `allowPrivilegeEscalation: false` with all capabilities dropped (`drop: ["ALL"]`).
+4. **Read-Only Root Filesystem**: `readOnlyRootFilesystem: true` with an in-memory `emptyDir` mounted at `/tmp` for temporary JVM writes, preventing container escape attacks.
+5. **Zero-Trust Network Isolation**: Kubernetes `NetworkPolicy` objects default-deny all namespace ingress, explicitly whitelisting traffic from Ingress -> Gateway -> Downstream Microservices -> Databases.

@@ -966,8 +966,14 @@ All services return standardized JSON error representations:
 | **FR-17**: User Registration | `UserService.register`, `User.java` | `UserServiceTest.java`, `AuthControllerTest.java` |
 | **FR-18**: Auth & Dual Token | `AuthService.login`, `JwtTokenProvider.java` | `AuthServiceTest.java`, `AuthControllerTest.java` |
 | **FR-19**: Refresh Token Rotation | `AuthService.refreshToken`, `RefreshTokenRepository.java` | `AuthServiceTest.java`, `AuthControllerTest.java` |
-| **FR-20**: Failed Login & Lockout | `AuthService.handleFailedLogin`, `User.lock` | `UserServiceTest.java`, `UserControllerTest.java` |
-| **FR-21**: RBAC & Ownership | `AccountSecurityEvaluator.java`, `PaymentSecurityEvaluator.java` | `AccountRbacIntegrationTest.java`, `PaymentRbacIntegrationTest.java` |
+| **FR-20**: Failed Login & Lockout | `AuthService.login`, `User.recordFailedLogin` | `PasswordPolicyTest.java`, `AuthControllerIntegrationTest.java` |
+| **FR-21**: RBAC & Ownership | `AccountService.validateAccountAccess`, `PaymentService.validatePaymentAccess` | `AccountRbacIntegrationTest.java`, `PaymentRbacIntegrationTest.java` |
+| **FR-22**: Admin User Management & Lock/Unlock | `UserService.updateStatus`, `UserController.java` | `UserControllerIntegrationTest.java` |
+| **NFR-8**: Container Hardening & Layered JRE | Multi-stage Dockerfiles (`eclipse-temurin:21-jre-alpine`), non-root `appuser:appgroup` | Container HEALTHCHECK, Trivy container audit |
+| **NFR-9**: CI/CD & DevSecOps Automation | `.gitlab-ci.yml`, `.github/workflows/ci.yml`, `sonar-project.properties` | SonarQube Quality Gate, Trivy SCA / IaC scans |
+| **NFR-10**: Kubernetes & OpenShift Compliance | `deploy/helm/payment-platform/`, `kind-config.yaml`, `scripts/*.ps1` | `helm lint`, `kubeconform`, `smoke-test.ps1` |
+| **NFR-11**: Observability & Micrometer Metrics | `PaymentService.java`, `AuthService.java`, `FraudCheckService.java`, Grafana dashboards | Prometheus actuator scraping, Prometheus alert rules |
+| **NFR-12**: Structured Logging & Data Masking | `logback-spring.xml`, `DataMaskingUtil.java`, ELK stack | `DataMaskingUtilTest.java`, Fluent Bit ingestion |
 
 
 
