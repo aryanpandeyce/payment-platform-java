@@ -8,7 +8,10 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-7.0-green.svg)](https://www.mongodb.com/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 
+Live demo: https://aryanpandeyce.github.io/payment-platform-java/
+
 A resilient, event-driven banking transaction and payment processing microservices platform built for global payment operations. Designed to demonstrate enterprise patterns including **Choreographed Saga**, **Transactional Outbox**, **Idempotent APIs**, and **Append-Only Auditing**.
+
 
 ---
 
