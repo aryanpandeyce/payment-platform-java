@@ -135,3 +135,13 @@ Every file created in the project and the reason it exists.
 - `run-local.ps1`: Automated PowerShell helper launching Docker Compose infrastructure and spawning each Spring Boot microservice in its own window.
 - `docs/LOCAL-TESTING.md`: Dedicated local testing guide with exact PowerShell commands and real controller JSON field names.
 
+## Phase A: Code quality (backend)
+- Converted all DTOs to Java records with Jakarta Bean Validation (`@NotBlank`, `@NotNull`, `@Positive`, etc.) across `account-service`, `payment-service`, and `api-gateway`.
+- Package restructuring into clean DDD/clean architecture boundaries: `api`, `application`, `domain`, `infrastructure`.
+- Standardized `@RestControllerAdvice` error model with `(timestamp, status, code, errorCode, message, path)`.
+- Introduced Flyway migrations (`V1__create_accounts_table.sql`, `V1__create_payments_and_outbox_tables.sql`) replacing `ddl-auto: update` with `ddl-auto: validate`.
+- Added structured logging with distributed correlation tracking via `X-Correlation-Id` across Spring Cloud Gateway, Web filters, and Kafka record headers.
+- Integrated `springdoc-openapi` (Swagger UI / OpenAPI 3.0 v2.8.5) across all services.
+- Added fast Testcontainers integration tests in `payment-service` (`PaymentIdempotencyTestcontainersTest` and `KafkaFlowTestcontainersTest`).
+
+

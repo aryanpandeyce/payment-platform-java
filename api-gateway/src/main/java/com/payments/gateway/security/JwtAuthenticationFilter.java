@@ -28,10 +28,11 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // Public endpoints skip karo (Login and Actuator health checks)
-        if (path.startsWith("/auth/") || path.startsWith("/actuator/")) {
+        // Public endpoints skip karo (Login, Actuator, Swagger UI)
+        if (path.startsWith("/auth/") || path.startsWith("/actuator/") || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
             return chain.filter(exchange);
         }
+
 
         // Authorization header check
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

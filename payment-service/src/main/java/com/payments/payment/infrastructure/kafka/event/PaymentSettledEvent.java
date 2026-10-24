@@ -1,0 +1,12 @@
+package com.payments.payment.infrastructure.kafka.event;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+public record PaymentSettledEvent(
+        UUID paymentId,
+        UUID senderAccountId,
+        UUID receiverAccountId,
+        BigDecimal amount,
+        String currency
+) {}

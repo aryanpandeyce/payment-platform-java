@@ -26,10 +26,23 @@ public class AuditEventListener {
         this.objectMapper = objectMapper;
     }
 
+    public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+
+    public void onDomainEvent(String message) {
+        onDomainEvent(message, null);
+    }
+
     // Har ek lifecycle domain event ko MongoDB audit_logs collection mein append karta hai
     @KafkaListener(topics = {"payment-initiated", "payment-validated", "payment-settled", "payment-failed"},
                    groupId = "audit-service-group")
-    public void onDomainEvent(String message) {
+    public void onDomainEvent(@org.springframework.messaging.handler.annotation.Payload String message,
+                              @org.springframework.messaging.handler.annotation.Header(name = CORRELATION_ID_HEADER, required = false) byte[] correlationIdBytes) {
+
+        String correlationId = (correlationIdBytes != null && correlationIdBytes.length > 0)
+                ? new String(correlationIdBytes, java.nio.charset.StandardCharsets.UTF_8)
+                : UUID.randomUUID().toString();
+
+        org.slf4j.MDC.put("correlationId", correlationId);
         try {
             JsonNode root = objectMapper.readTree(message);
             String paymentId = root.has("paymentId") ? root.get("paymentId").asText() : "UNKNOWN";
@@ -53,14 +66,17 @@ public class AuditEventListener {
                     paymentId,
                     Instant.now(),
                     message,
-                    UUID.randomUUID().toString()
+                    correlationId
             );
 
             auditLogRepository.save(logEntry);
-            log.info("Appended immutable audit log in MongoDB for aggregate: {}, type: {}", paymentId, eventType);
-
+            log.info("Appended immutable audit log in MongoDB for aggregate: {}, type: {}, correlationId: {}",
+                    paymentId, eventType, correlationId);
         } catch (Exception e) {
-            log.error("Failed to append audit log to MongoDB: {}", e.getMessage(), e);
+            log.error("Failed to parse and persist audit log: {}", e.getMessage(), e);
+        } finally {
+            org.slf4j.MDC.remove("correlationId");
         }
     }
 }
+
