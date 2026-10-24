@@ -119,3 +119,17 @@ Every file created in the project and the reason it exists.
 - `frontend/src/components/PaymentForm.jsx`: Double-click protected form with unique Idempotency-Key preview and quick amount chips.
 - `frontend/src/components/TransactionList.jsx`: Live auto-refreshing transaction table with pulsing status badges and failure reasons.
 - `frontend/src/components/ArchitectureModal.jsx`: Interactive slideover explaining the 7-step event-driven architecture.
+
+## Phase 7: ship it
+- `account-service/Dockerfile`: Multi-stage Eclipse Temurin Java 21 Alpine container build for account service.
+- `payment-service/Dockerfile`: Multi-stage Eclipse Temurin Java 21 Alpine container build for payment service.
+- `fraud-service/Dockerfile`: Multi-stage Eclipse Temurin Java 21 Alpine container build for fraud service.
+- `notification-service/Dockerfile`: Multi-stage Eclipse Temurin Java 21 Alpine container build for notification service.
+- `api-gateway/Dockerfile`: Multi-stage Eclipse Temurin Java 21 Alpine container build for API gateway.
+- `frontend/Dockerfile`: Multi-stage Node 22 build and Nginx Alpine container serving production React dashboard.
+- `docker/init-dbs.sh`: PostgreSQL entrypoint initialization script creating `account_db` and `payment_db`.
+- `docker-compose.yml`: Comprehensive multi-container setup with dual-listener Kafka (KRaft), PostgreSQL, MongoDB, all 5 Java microservices, and React dashboard.
+- `.github/workflows/ci.yml`: GitHub Actions CI/CD workflow running Maven tests across all microservices and deploying the React frontend to GitHub Pages.
+- `docs/DEMO.md`: 2-minute step-by-step PowerShell demo script verifying authentication, account creation, transfer settlement, idempotency, fraud breach, and MongoDB audits.
+- `README.md`: Comprehensive system documentation with Mermaid architecture diagram, port registry, patterns, quickstart instructions, and known limitations.
+
