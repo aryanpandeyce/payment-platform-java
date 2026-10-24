@@ -8,6 +8,26 @@ spring:
 
   cloud:
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost}
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowed-headers:
+              - "*"
+            allow-credentials: true
+            max-age: 3600
+      default-filters:
+        - SetResponseHeader=X-Content-Type-Options, nosniff
+        - SetResponseHeader=X-Frame-Options, DENY
+        - SetResponseHeader=X-XSS-Protection, 1; mode=block
+        - SetResponseHeader=Referrer-Policy, strict-origin-when-cross-origin
       routes:
         # Route 0a: Identity Service Auth (Port 8084)
         - id: identity-service-auth

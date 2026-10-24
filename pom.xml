@@ -201,6 +201,20 @@
                         </execution>
                     </executions>
                 </plugin>
+
+                <!-- SonarQube Scanner -->
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>5.0.0.4389</version>
+                </plugin>
+
+                <!-- OWASP Dependency-Check -->
+                <plugin>
+                    <groupId>org.owasp</groupId>
+                    <artifactId>dependency-check-maven</artifactId>
+                    <version>12.1.0</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 

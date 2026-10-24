@@ -1,0 +1,140 @@
+# DevSecOps & Security Governance Guide
+
+This document explains the security architecture, local quality scanning, CI/CD pipelines, and verification procedures for the **ApexPay** microservices platform.
+
+---
+
+## 1. DevSecOps Pipeline Flow
+
+```mermaid
+flowchart LR
+    Dev["Developer Commit"] --> CI["GitLab CI Pipeline"]
+    
+    subgraph S1 ["1. Build & Test"]
+        Build["Maven Multi-Module Compile"] --> Unit["Surefire Unit Tests"]
+        Unit --> Int["Failsafe Integration Tests<br/>(Testcontainers DinD)"]
+        Int --> JaCoCo["JaCoCo Coverage XML"]
+    end
+    
+    subgraph S2 ["2. Quality & Security"]
+        JaCoCo --> Sonar["SonarQube Quality Gate<br/>Coverage >= 70%, 0 Bugs"]
+        Sonar --> TrivyFS["Trivy Filesystem & SCA"]
+        TrivyFS --> Secret["Trivy Secret Scanner"]
+    end
+    
+    subgraph S3 ["3. Packaging & Container Security"]
+        Secret --> Kaniko["Kaniko Container Build<br/>(Temurin 21 Non-Root)"]
+        Kaniko --> TrivyImg["Trivy Image Scan<br/>(0 High/Critical CVEs)"]
+    end
+    
+    subgraph S4 ["4. GitOps Deployment"]
+        TrivyImg --> Helm["Helm Umbrella Chart"]
+        Helm --> Kind["Kubernetes / Kind Cluster"]
+    end
+
+    CI --> S1 --> S2 --> S3 --> S4
+```
+
+---
+
+## 2. Local SonarQube Setup & Token Creation
+
+We provide a lightweight, dedicated SonarQube Community Edition stack running on PostgreSQL.
+
+### Step 1: Start the SonarQube Container Stack
+Run in PowerShell:
+```powershell
+docker compose -f docker-compose.quality.yml up -d
+```
+*Note: SonarQube and its PostgreSQL database require ~2 GB of free RAM.*
+
+### Step 2: Generate SonarQube Analysis Token
+1. Open your browser and navigate to `http://localhost:9000`.
+2. Log in with the default credentials:
+   - **Username**: `admin`
+   - **Password**: `admin`
+3. When prompted, set a new password (e.g. `Admin@ApexPay2026!`).
+4. Click your user avatar in the top-right corner -> **My Account** -> **Security** tab.
+5. Under **Generate Tokens**:
+   - **Name**: `apexpay-local`
+   - **Type**: `User Token`
+   - **Expires in**: 30 days (or No Expiration)
+6. Click **Generate** and copy the generated token string (`squ_...`).
+
+### Step 3: Configure the ApexPay Quality Gate
+In SonarQube UI:
+1. Navigate to **Quality Gates** -> **Create**.
+2. Name: `ApexPay Financial Standards`.
+3. Add the following conditions:
+   - **Coverage on New Code**: `>= 70.0%`
+   - **New Reliability Bugs**: `0`
+   - **New Security Vulnerabilities**: `0`
+   - **Duplicated Lines on New Code**: `<= 3.0%`
+   - **Security Hotspots Reviewed**: `100%`
+4. Set `ApexPay Financial Standards` as the Default Quality Gate.
+
+### Step 4: Execute Local Sonar Analysis
+Run in PowerShell:
+```powershell
+$env:SONAR_TOKEN="<your_copied_token>"
+.\mvnw.cmd clean verify -B
+.\mvnw.cmd sonar:sonar `
+  -Dsonar.host.url="http://localhost:9000" `
+  -Dsonar.token="$env:SONAR_TOKEN" `
+  -Dsonar.qualitygate.wait=true
+```
+
+---
+
+## 3. Local Security Scanning with Trivy
+
+Trivy runs free and locally to catch container vulnerabilities, filesystem dependencies, secret leaks, and Kubernetes misconfigurations.
+
+### 1. Filesystem Vulnerability Scan (SCA)
+```powershell
+trivy fs --scanners vuln --severity HIGH,CRITICAL --ignorefile .trivyignore .
+```
+
+### 2. Secret Leak Detection
+Guards against hardcoded API keys, JWT secrets, database passwords, or private keys:
+```powershell
+trivy fs --scanners secret .
+```
+
+### 3. Infrastructure-as-Code (IaC) & Helm Audit
+Audits Kubernetes manifests and Helm charts against CIS benchmarks:
+```powershell
+trivy config deploy/
+```
+
+### 4. Container Image Vulnerability Scan
+```powershell
+trivy image apexpay/payment-service:latest
+```
+
+---
+
+## 4. API Gateway Security Guardrails
+
+The Spring Cloud API Gateway (Port 8090) enforces defence-in-depth:
+1. **Defensive HTTP Headers**:
+   - `X-Content-Type-Options: nosniff`
+   - `X-Frame-Options: DENY`
+   - `X-XSS-Protection: 1; mode=block`
+   - `Referrer-Policy: strict-origin-when-cross-origin`
+2. **CORS Restrictions**:
+   - Cross-origin requests are blocked unless originating from allowed origins declared in `$CORS_ALLOWED_ORIGINS` (default: `http://localhost:5173,http://localhost:3000,http://localhost`).
+3. **Brute-Force Rate Limiting**:
+   - `LoginRateLimiterFilter` restricts `/auth/login` to a maximum of 15 requests per minute per IP address. Exceeded limits return HTTP 429 `RATE_LIMIT_EXCEEDED`.
+4. **Header Sanctification**:
+   - The Gateway strips and overrides client-supplied `X-User-Id` and `X-User-Role` headers before forwarding requests downstream, guaranteeing that services only receive cryptographically verified identity claims.
+
+---
+
+## 5. Observability & Logging Access
+
+When the observability stack is launched (`docker compose -f docker-compose.observability.yml up -d`):
+- **Grafana**: `http://localhost:3000` (admin / admin)
+- **Kibana**: `http://localhost:5601`
+- **Prometheus**: `http://localhost:9090`
+- **Elasticsearch API**: `http://localhost:9200`
