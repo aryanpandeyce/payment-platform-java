@@ -308,8 +308,432 @@ Every service and operation handling money in this platform must adhere to the f
 - Overdraft protection and credit lending limits.
 - Bulk batch payroll processing.
 
-### 2.11 Future Scope
-- Multi-factor authentication (SMS/TOTP 2FA) before authorizing high-value transfers.
-- Dynamic machine-learning fraud scoring engine based on device fingerprinting and geolocation.
-- Split-payment capability (dividing a single bill across multiple funding accounts).
+---
+
+## 3. Non-Functional Requirements (NFR)
+
+1. **Precision & Consistency**:
+   - Zero floating-point rounding errors in monetary calculation (`BigDecimal` scale 2, `RoundingMode.HALF_EVEN`).
+   - Strong transactional consistency within microservice boundaries; eventual consistency across services via Kafka event choreography.
+   - Optimistic concurrency control on accounts (`@Version`) preventing double-debits in concurrent execution.
+2. **Idempotency & Deduplication**:
+   - Every payment initiation strictly requires a UUID `Idempotency-Key`. Replays return the cached result with zero side-effects.
+   - Idempotency key payload mismatch returns HTTP 409 Conflict.
+   - Consumers feature deduplication guards (`processedPayments`) preventing double processing of retransmitted Kafka messages.
+3. **Resilience & Reliability**:
+   - Transactional Outbox Pattern ensures zero event loss even during broker disconnects.
+   - Kafka consumer error handling with `DeadLetterPublishingRecoverer` (2 retries with 1s backoff before forwarding to `<topic>.DLT`).
+4. **Observability & Traceability**:
+   - Distributed correlation ID (`X-Correlation-Id`) generated at the Gateway or HTTP client, propagated through HTTP headers, MDC logging, and Kafka message headers.
+   - Centralized immutable append-only audit logging in MongoDB.
+5. **Security & Isolation**:
+   - Database-per-service pattern (PostgreSQL `account_db`, `payment_db`, MongoDB `audit_db`). No cross-service database access.
+   - Stateless HMAC-SHA256 JWT authentication at the API Gateway.
+   - Zero hardcoded secrets in source code; externalized via environment variables.
+
+---
+
+## 4. Architecture
+
+```mermaid
+graph TD
+    Client["Client / React Frontend (Vite)"] -->|HTTP / JWT| Gateway["API Gateway (Port 8090)"]
+    Gateway -->|/api/accounts/**| AccSvc["Account Service (Port 8085)"]
+    Gateway -->|/api/payments/**| PaySvc["Payment Service (Port 8086)"]
+    Gateway -->|/api/audit-logs/**| NotifSvc["Notification & Audit Service (Port 8088)"]
+
+    PaySvc -->|JDBC| PayDB[("PostgreSQL: payment_db<br/>payments, outbox_events, payment_timeline")]
+    AccSvc -->|JDBC| AccDB[("PostgreSQL: account_db<br/>accounts, ledger_entries")]
+    NotifSvc -->|Mongo Driver| AuditDB[("MongoDB: audit_db<br/>audit_logs")]
+
+    PaySvc -.->|Outbox Poller| KafkaTopicInit["Kafka: payment-initiated"]
+    KafkaTopicInit --> FraudSvc["Fraud Service (Port 8087)"]
+
+    FraudSvc -.->|Checks Pass| KafkaTopicVal["Kafka: payment-validated"]
+    FraudSvc -.->|Threshold / Velocity Breach| KafkaTopicFail["Kafka: payment-failed"]
+
+    KafkaTopicVal --> AccSvc
+    KafkaTopicVal --> PaySvc
+
+    AccSvc -.->|Settlement Success| KafkaTopicSettled["Kafka: payment-settled"]
+    AccSvc -.->|Insufficient Funds / Missing Account| KafkaTopicFail
+
+    KafkaTopicSettled --> PaySvc
+    KafkaTopicSettled --> NotifSvc
+    KafkaTopicFail --> PaySvc
+    KafkaTopicFail --> NotifSvc
+```
+
+---
+
+## 5. Data Model
+
+### 5.1 `account_db` (PostgreSQL)
+
+#### `accounts`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Unique account identifier |
+| `owner_name` | `VARCHAR(255)` | NOT NULL | Customer name |
+| `balance` | `NUMERIC(19, 2)` | NOT NULL | Current available balance |
+| `version` | `BIGINT` | NOT NULL DEFAULT 0 | Optimistic locking token |
+| `currency` | `VARCHAR(10)` | NOT NULL DEFAULT 'INR' | ISO currency code |
+| `status` | `VARCHAR(50)` | NOT NULL DEFAULT 'ACTIVE' | Account state (ACTIVE, BLOCKED) |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Account opening timestamp |
+
+#### `ledger_entries`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Ledger entry UUID |
+| `account_id` | `UUID` | NOT NULL, FK -> accounts(id) | Associated account |
+| `entry_type` | `VARCHAR(20)` | NOT NULL | `DEBIT` or `CREDIT` |
+| `amount` | `NUMERIC(19, 2)` | NOT NULL | Transaction magnitude |
+| `balance_after` | `NUMERIC(19, 2)` | NOT NULL | Running balance after transaction |
+| `reference_id` | `VARCHAR(100)` | NULLABLE | Associated payment ID or source |
+| `description` | `VARCHAR(255)` | NULLABLE | Human-readable explanation |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Timestamp of ledger posting |
+
+---
+
+### 5.2 `payment_db` (PostgreSQL)
+
+#### `payments`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Payment transaction UUID |
+| `idempotency_key` | `VARCHAR(255)` | NOT NULL UNIQUE | Unique client deduplication token |
+| `sender_account_id` | `UUID` | NOT NULL | Debited account |
+| `receiver_account_id` | `UUID` | NOT NULL | Credited account |
+| `amount` | `NUMERIC(19, 2)` | NOT NULL | Transfer amount |
+| `currency` | `VARCHAR(10)` | NOT NULL DEFAULT 'INR' | Currency code |
+| `status` | `VARCHAR(50)` | NOT NULL | `INITIATED`, `VALIDATED`, `SETTLED`, `FAILED` |
+| `failure_reason` | `VARCHAR(255)` | NULLABLE | Reason string if terminal state is FAILED |
+| `version` | `BIGINT` | NOT NULL DEFAULT 0 | Optimistic lock token |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Creation timestamp |
+| `updated_at` | `TIMESTAMPTZ` | NOT NULL | Last update timestamp |
+
+#### `outbox_events`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Event UUID |
+| `aggregate_type` | `VARCHAR(255)` | NOT NULL | Aggregate name (`PAYMENT`) |
+| `aggregate_id` | `UUID` | NOT NULL | Aggregate ID |
+| `event_type` | `VARCHAR(255)` | NOT NULL | Event name (`PaymentInitiated`) |
+| `payload` | `TEXT` | NOT NULL | Serialized JSON event string |
+| `status` | `VARCHAR(50)` | NOT NULL | `PENDING`, `SENT` |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Creation timestamp |
+| `sent_at` | `TIMESTAMPTZ` | NULLABLE | Timestamp when published to Kafka |
+
+#### `payment_timeline`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Timeline entry UUID |
+| `payment_id` | `UUID` | NOT NULL, FK -> payments(id) | Associated payment |
+| `status` | `VARCHAR(50)` | NOT NULL | Status entered |
+| `timestamp` | `TIMESTAMPTZ` | NOT NULL | Timestamp when state entered |
+| `failure_reason` | `VARCHAR(255)` | NULLABLE | Failure reason if transition was to FAILED |
+
+---
+
+### 5.3 `audit_db` (MongoDB)
+
+#### Collection: `audit_logs`
+```json
+{
+  "_id": "6718d7...",
+  "eventId": "e1000000-0000-0000-0000-000000000001",
+  "eventType": "PaymentSettled",
+  "aggregateId": "p1000000-0000-0000-0000-000000000001",
+  "timestamp": "2026-10-24T14:00:00Z",
+  "payload": "{\"paymentId\":\"...\",\"amount\":500.00}",
+  "correlationId": "c8942b10-6720-4ff6-9bb5-bb2a440c9f12"
+}
+```
+
+---
+
+## 6. API Specification
+
+### 6.1 Authentication (`/auth`)
+
+#### `POST /auth/login`
+- **Request Body**:
+```json
+{
+  "username": "admin",
+  "password": "password"
+}
+```
+- **Response (200 OK)**:
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 86400,
+  "username": "admin"
+}
+```
+
+---
+
+### 6.2 Accounts API (`/api/accounts`)
+
+#### `POST /api/accounts`
+- **Request Body**:
+```json
+{
+  "ownerName": "Rahul Sharma",
+  "initialBalance": 10000.00,
+  "currency": "INR"
+}
+```
+- **Response (201 Created)**:
+```json
+{
+  "id": "a1000000-0000-0000-0000-000000000001",
+  "ownerName": "Rahul Sharma",
+  "balance": 10000.00,
+  "currency": "INR",
+  "status": "ACTIVE",
+  "createdAt": "2026-10-24T14:00:00Z"
+}
+```
+
+#### `GET /api/accounts`
+- **Response (200 OK)**: Array of `AccountResponse` objects.
+
+#### `GET /api/accounts/{id}`
+- **Response (200 OK)**: Single `AccountResponse` object.
+
+#### `GET /api/accounts/{id}/balance`
+- **Response (200 OK)**:
+```json
+{
+  "id": "a1000000-0000-0000-0000-000000000001",
+  "balance": 10000.00,
+  "currency": "INR",
+  "status": "ACTIVE"
+}
+```
+
+#### `GET /api/accounts/{id}/transactions`
+- **Response (200 OK)**:
+```json
+[
+  {
+    "id": "l1000000-0000-0000-0000-000000000001",
+    "accountId": "a1000000-0000-0000-0000-000000000001",
+    "entryType": "CREDIT",
+    "amount": 10000.00,
+    "balanceAfter": 10000.00,
+    "referenceId": "INITIAL_DEPOSIT",
+    "description": "Initial account opening balance",
+    "createdAt": "2026-10-24T14:00:00Z"
+  }
+]
+```
+
+#### `GET /api/accounts/{id}/statement/csv`
+- **Response (200 OK, `text/csv`)**:
+```csv
+TransactionId,AccountId,OwnerName,Timestamp,Type,Amount,BalanceAfter,ReferenceId,Description
+l1000...,a1000...,"Rahul Sharma",2026-10-24T14:00:00Z,CREDIT,10000.00,10000.00,"INITIAL_DEPOSIT","Initial account opening balance"
+```
+
+---
+
+### 6.3 Payments API (`/api/payments`)
+
+#### `POST /api/payments`
+- **Headers**: `Idempotency-Key: <UUID>`
+- **Request Body**:
+```json
+{
+  "senderAccountId": "a1000000-0000-0000-0000-000000000001",
+  "receiverAccountId": "a2000000-0000-0000-0000-000000000002",
+  "amount": 500.00,
+  "currency": "INR"
+}
+```
+- **Response (202 Accepted)**:
+```json
+{
+  "id": "p1000000-0000-0000-0000-000000000001",
+  "idempotencyKey": "c8942b10-6720-4ff6-9bb5-bb2a440c9f12",
+  "senderAccountId": "a1000000-0000-0000-0000-000000000001",
+  "receiverAccountId": "a2000000-0000-0000-0000-000000000002",
+  "amount": 500.00,
+  "currency": "INR",
+  "status": "INITIATED",
+  "failureReason": null,
+  "createdAt": "2026-10-24T14:00:00Z",
+  "updatedAt": "2026-10-24T14:00:00Z",
+  "timeline": [
+    {
+      "id": "t100...",
+      "paymentId": "p100...",
+      "status": "INITIATED",
+      "timestamp": "2026-10-24T14:00:00Z",
+      "failureReason": null
+    }
+  ]
+}
+```
+
+#### `GET /api/payments`
+- **Query Params**: `status`, `from`, `to`, `search`, `page`, `size`, `sort`
+- **Response (200 OK)**: Paginated `Page<PaymentResponse>` or `List<PaymentResponse>`.
+
+#### `GET /api/payments/{id}/timeline`
+- **Response (200 OK)**: Array of `TimelineEntryResponse` entries tracing `INITIATED` -> `VALIDATED` -> `SETTLED`.
+
+---
+
+### 6.4 Audit Logs API (`/api/audit-logs`)
+
+#### `GET /api/audit-logs`
+- **Query Params**: `eventType`, `correlationId`, `aggregateId`, `from`, `to`, `page`, `size`
+- **Response (200 OK)**:
+```json
+{
+  "content": [
+    {
+      "id": "audit-1",
+      "eventId": "evt-1",
+      "eventType": "PaymentSettled",
+      "aggregateId": "p100...",
+      "timestamp": "2026-10-24T14:00:05Z",
+      "payload": "{\"amount\":500.00}",
+      "correlationId": "c8942b10-..."
+    }
+  ],
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+---
+
+## 7. Event Catalog
+
+| Topic | Producer | Consumer(s) | Key | Key Fields in Payload |
+|---|---|---|---|---|
+| `payment-initiated` | `payment-service` | `fraud-service`, `notification-service` | `paymentId` | `paymentId`, `idempotencyKey`, `senderAccountId`, `receiverAccountId`, `amount`, `currency`, `timestamp` |
+| `payment-validated` | `fraud-service` | `account-service`, `payment-service`, `notification-service` | `paymentId` | `paymentId`, `senderAccountId`, `receiverAccountId`, `amount`, `currency` |
+| `payment-settled` | `account-service` | `payment-service`, `notification-service` | `paymentId` | `paymentId`, `senderAccountId`, `receiverAccountId`, `amount`, `currency` |
+| `payment-failed` | `fraud-service`, `account-service` | `payment-service`, `notification-service` | `paymentId` | `paymentId`, `failureReason` |
+| `*.DLT` | Any service (recoverer) | Dead-letter monitor | original key | original message with Kafka exception headers |
+
+### Sample Payload: `PaymentInitiatedEvent`
+```json
+{
+  "paymentId": "p1000000-0000-0000-0000-000000000001",
+  "idempotencyKey": "demo-key-12345",
+  "senderAccountId": "a1000000-0000-0000-0000-000000000001",
+  "receiverAccountId": "a2000000-0000-0000-0000-000000000002",
+  "amount": 500.00,
+  "currency": "INR",
+  "createdAt": "2026-10-24T14:00:00Z"
+}
+```
+
+---
+
+## 8. Payment State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> INITIATED : POST /api/payments with Idempotency-Key
+    INITIATED --> VALIDATED : Fraud Rules Pass (Amount <= 50,000, Velocity <= 5)
+    INITIATED --> FAILED : Fraud Breach (EXCEEDS_MAX_AMOUNT_LIMIT or VELOCITY_LIMIT_EXCEEDED)
+    VALIDATED --> SETTLED : Atomic Ledger Transfer Success (Sender Debited, Receiver Credited)
+    VALIDATED --> FAILED : Settlement Failure (INSUFFICIENT_FUNDS or Missing Account)
+    SETTLED --> [*] : Terminal State (Immutable)
+    FAILED --> [*] : Terminal State (Immutable)
+```
+
+---
+
+## 9. Error Handling and Edge Cases
+
+### 9.1 Standard Error Format
+All services return standardized JSON error representations:
+```json
+{
+  "timestamp": "2026-10-24T14:00:00Z",
+  "status": 409,
+  "code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
+  "errorCode": "IDEMPOTENCY_PAYLOAD_MISMATCH",
+  "message": "Idempotency key reused with different payload",
+  "path": "/api/payments"
+}
+```
+
+### 9.2 Error Code Mapping
+| HTTP Status | Error Code | Description |
+|---|---|---|
+| 400 Bad Request | `INVALID_INITIAL_BALANCE` | Account opening with negative initial balance |
+| 400 Bad Request | `INVALID_AMOUNT` | Transfer or debit amount &le; 0 |
+| 400 Bad Request | `SAME_ACCOUNT_TRANSFER` | Sender and receiver account IDs are identical |
+| 400 Bad Request | `VALIDATION_FAILED` | Jakarta Bean Validation constraint violation |
+| 401 Unauthorized | `UNAUTHORIZED` | Missing, invalid, or expired JWT token |
+| 404 Not Found | `ACCOUNT_NOT_FOUND` | Account ID does not exist in `accounts` table |
+| 404 Not Found | `PAYMENT_NOT_FOUND` | Payment ID does not exist in `payments` table |
+| 409 Conflict | `INSUFFICIENT_FUNDS` | Debit requested exceeds current available balance |
+| 409 Conflict | `IDEMPOTENCY_PAYLOAD_MISMATCH` | Reused idempotency key with modified transfer parameters |
+| 409 Conflict | `INVALID_STATE_TRANSITION` | Attempted mutation of terminal payment (`SETTLED` / `FAILED`) |
+
+### 9.3 Edge Cases & Distributed Guards
+- **Broker Downtime**: Payment Service writes both payment record and `OutboxEvent` in one Postgres transaction. Even if Kafka is down, events are polled and published once Kafka restores.
+- **Duplicate Messages**: Consumers check local idempotency caches (`processedPayments`) before executing transfers.
+- **Poison Pills / Malformed Messages**: Handled by Spring Kafka `DefaultErrorHandler` with `DeadLetterPublishingRecoverer` forwarding to `<topic>.DLT` after 2 retries.
+
+---
+
+## 10. Test Strategy
+
+| Test Type | Scope | Tools Used |
+|---|---|---|
+| **Unit Tests** | Domain aggregates, business invariant rules, fraud engines, JWT signing | JUnit 5, AssertJ, Mockito |
+| **Integration Tests** | REST controllers, Spring MVC mappings, H2 persistence, JSON validation | `@SpringBootTest`, `MockMvc`, `WebTestClient` |
+| **Testcontainers Integration Tests** | Real PostgreSQL database constraints, Flyway migrations, Apache Kafka KRaft message exchange | Testcontainers, `PostgreSQLContainer`, `KafkaContainer` |
+| **End-to-End Smoke Tests** | Multi-container Docker Compose validation, PowerShell demo execution | `docker-compose.yml`, `DEMO.md` |
+
+---
+
+## 11. Known Limitations & Future Scope
+
+### Known Limitations
+1. Single Currency: Currently supports only `INR`.
+2. Sliding Window Velocity Cache: In-memory sliding window in `fraud-service` resets on service restart (production should back with Redis).
+3. Simulated Clearing: External clearing rails (UPI, IMPS, RTGS) are simulated via internal event choreography.
+
+### Future Scope
+1. Redis-backed distributed velocity tracking and rate-limiting.
+2. ISO 20022 clearing simulator for international wire transfers.
+3. OAuth2 / OpenID Connect single sign-on integration.
+
+---
+
+## 12. Requirements Traceability Matrix
+
+| Functional Requirement | Core Backend Implementation | Test Suite |
+|---|---|---|
+| **FR-1**: Create Account | `AccountService.createAccount`, `Account.java` | `AccountTest.java`, `AccountControllerIntegrationTest.java` |
+| **FR-2**: Check Balance | `AccountService.getBalance`, `AccountController.java` | `AccountControllerIntegrationTest.java` |
+| **FR-3**: Debit Funds | `Account.debit`, `AccountService.debit` | `AccountTest.java`, `AccountControllerIntegrationTest.java` |
+| **FR-4**: Credit Funds | `Account.credit`, `AccountService.credit` | `AccountTest.java`, `AccountControllerIntegrationTest.java` |
+| **FR-5**: Idempotent Payment | `PaymentService.initiatePayment`, `PaymentRepository.java` | `PaymentControllerIntegrationTest.java`, `PaymentIdempotencyTestcontainersTest.java` |
+| **FR-6**: State Machine Transitions | `Payment.validate`, `Payment.settle`, `Payment.fail` | `PaymentTest.java`, `PaymentFeaturesIntegrationTest.java` |
+| **FR-7**: Failure Reason Recording | `Payment.fail`, `PaymentTimeline.java` | `PaymentTest.java`, `PaymentFeaturesIntegrationTest.java` |
+| **FR-8**: Amount Limit Check | `FraudCheckService.checkAmountLimit`, `FraudProperties.java` | `FraudCheckServiceTest.java` |
+| **FR-9**: Velocity Check | `FraudCheckService.checkVelocityLimit` | `FraudCheckServiceTest.java` |
+| **FR-10**: Settlement Execution | `SettlementEventListener.java`, `AccountService.transfer` | `KafkaFlowTestcontainersTest.java`, `AccountTransactionsIntegrationTest.java` |
+| **FR-11**: Settlement Compensation | `SettlementEventListener.publishFailure` | `SettlementEventListenerTest.java` |
+| **FR-12**: Notifications | `NotificationEventListener.java` | `NotificationServiceApplicationTests.java` |
+| **FR-13**: MongoDB Audit Trail | `AuditEventListener.java`, `AuditLogRepository.java` | `AuditEventListenerTest.java`, `AuditLogControllerTest.java` |
+| **FR-14**: Gateway JWT & Routing | `JwtAuthenticationFilter.java`, `JwtUtil.java` | `AuthControllerTest.java`, `JwtUtilTest.java` |
+| **FR-15**: Double-Click Form | `PaymentForm.jsx`, `ConfirmationModal.jsx` | `PaymentForm.jsx` |
+| **FR-16**: Live Dashboard & Stepper | `TransactionList.jsx`, `StatusStepperModal.jsx`, `SpendingChart.jsx` | `App.jsx`, `TransactionList.jsx` |
+
 

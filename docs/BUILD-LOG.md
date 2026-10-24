@@ -177,6 +177,14 @@ Every file created in the project and the reason it exists.
 - `frontend/src/components/Navbar.jsx`: Added dark/light theme switch, MongoDB audit trail trigger, and responsive mobile layout.
 - `frontend/src/services/api.js`: Enhanced with ledger, statement CSV export, timeline, and MongoDB audit log endpoints, with 100% offline mock fidelity for GitHub Pages.
 
+## Phase D: SSD upgrade & Architecture Decision Records
+- `docs/SSD.md`: Fully completed Sections 3 through 12, covering NFRs, comprehensive Mermaid architecture diagram, concrete PostgreSQL schemas (`accounts`, `ledger_entries`, `payments`, `outbox_events`, `payment_timeline`) and MongoDB `audit_logs` collection, complete OpenAPI endpoint contract examples, Event Catalog, payment state diagram, standardized error format and codes, testing strategy, known limitations, future scope, and the Requirements Traceability Matrix (`FR -> Code -> Test`).
+- `docs/adr/ADR-001-why-kafka.md`: Architecture Decision Record explaining Kafka KRaft for ordered partition streams and decoupled consumer groups.
+- `docs/adr/ADR-002-transactional-outbox.md`: Architecture Decision Record explaining local outbox tables for at-least-once message delivery without 2PC.
+- `docs/adr/ADR-003-idempotency-keys.md`: Architecture Decision Record explaining client UUID idempotency keys for transfer deduplication.
+- `docs/adr/ADR-004-mongodb-for-audit.md`: Architecture Decision Record explaining MongoDB for centralized immutable audit logs.
+
+
 
 
 
