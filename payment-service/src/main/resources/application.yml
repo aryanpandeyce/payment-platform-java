@@ -1,0 +1,42 @@
+server:
+  # Payment service port 8086 as per SSD/specs
+  port: ${SERVER_PORT:8086}
+
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    # PostgreSQL host port 5433, database payment_db
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/payment_db}
+    username: ${DB_USERNAME:payments}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    hibernate:
+      ddl-auto: update
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

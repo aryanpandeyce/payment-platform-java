@@ -25,3 +25,28 @@ Every file created in the project and the reason it exists.
 - `account-service/src/main/java/com/payments/account/controller/GlobalExceptionHandler.java`: Centralized exception handler mapping domain errors to standard HTTP status codes (400, 404, 409).
 - `account-service/src/main/java/com/payments/account/controller/AccountController.java`: REST controller exposing endpoints for account management, balance, debit, and credit.
 - `account-service/src/test/java/com/payments/account/controller/AccountControllerIntegrationTest.java`: Integration tests verifying FR-1 through FR-4 acceptance criteria.
+
+## Phase 2: payment-service (FR-5..7)
+- `payment-service/pom.xml`: Maven build file for payment service with Web, JPA, Kafka and H2.
+- `payment-service/src/main/resources/application.yml`: Configuration for payment service on port 8086 with Postgres and Kafka.
+- `payment-service/src/test/resources/application.yml`: Test configuration using in-memory H2.
+- `payment-service/src/main/java/com/payments/payment/PaymentServiceApplication.java`: Main Spring Boot application entry point with @EnableScheduling.
+- `payment-service/src/main/java/com/payments/payment/domain/PaymentStatus.java`: State machine status enum (INITIATED, VALIDATED, SETTLED, FAILED).
+- `payment-service/src/main/java/com/payments/payment/domain/InvalidStateTransitionException.java`: Domain exception enforcing legal state transitions and rejecting mutations from terminal states.
+- `payment-service/src/main/java/com/payments/payment/domain/IdempotencyPayloadMismatchException.java`: Exception thrown when the same idempotency key is submitted with a different body (HTTP 409).
+- `payment-service/src/main/java/com/payments/payment/domain/PaymentNotFoundException.java`: Exception thrown when a payment ID does not exist in database (HTTP 404).
+- `payment-service/src/main/java/com/payments/payment/domain/Payment.java`: Aggregate root enforcing idempotency key uniqueness, distinct parties, positive amounts, and state machine transitions.
+- `payment-service/src/main/java/com/payments/payment/domain/OutboxEvent.java`: Transactional outbox table entity ensuring reliable message delivery.
+- `payment-service/src/main/java/com/payments/payment/repository/PaymentRepository.java`: Spring Data JPA repository for payment entities with idempotency key lookup.
+- `payment-service/src/main/java/com/payments/payment/repository/OutboxRepository.java`: Repository for querying pending outbox messages in chronological order.
+- `payment-service/src/main/java/com/payments/payment/dto/InitiatePaymentRequest.java`: DTO validating incoming payment creation request.
+- `payment-service/src/main/java/com/payments/payment/dto/PaymentResponse.java`: DTO returning complete payment lifecycle and metadata state.
+- `payment-service/src/main/java/com/payments/payment/dto/ErrorResponse.java`: Standardized error JSON response model.
+- `payment-service/src/main/java/com/payments/payment/event/PaymentInitiatedEvent.java`: Domain event published to Kafka topic `payment-initiated`.
+- `payment-service/src/main/java/com/payments/payment/service/PaymentService.java`: Service coordinating idempotent creation, outbox event writing, and state transitions.
+- `payment-service/src/main/java/com/payments/payment/service/OutboxPoller.java`: Background scheduled worker publishing pending outbox events to Kafka.
+- `payment-service/src/main/java/com/payments/payment/controller/GlobalExceptionHandler.java`: Centralized exception handler mapping idempotency conflicts and state errors to standard HTTP status codes.
+- `payment-service/src/main/java/com/payments/payment/controller/PaymentController.java`: REST controller exposing POST /api/payments, GET /api/payments/{id}, and GET /api/payments.
+- `payment-service/src/test/java/com/payments/payment/domain/PaymentTest.java`: Unit tests verifying state machine transitions, terminal state enforcement, and financial invariants.
+- `payment-service/src/test/java/com/payments/payment/PaymentServiceApplicationTests.java`: Context loading smoke test for payment service.
+- `payment-service/src/test/java/com/payments/payment/controller/PaymentControllerIntegrationTest.java`: Integration tests verifying FR-5, FR-6, idempotency reuse, mismatch conflict, and outbox persistence.
