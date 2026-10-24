@@ -1,12 +1,22 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout, setMockModeState } from '../store/authSlice';
 import { setMockMode } from '../services/api';
-import { ShieldCheck, LogOut, Radio, Server, Layers } from 'lucide-react';
+import { ShieldCheck, LogOut, Radio, Server, Layers, Sun, Moon, Database } from 'lucide-react';
 
-export default function Navbar({ onOpenArch }) {
+export default function Navbar({ onOpenArch, onOpenAudit }) {
   const dispatch = useDispatch();
   const { username, isMockMode } = useSelector(state => state.auth);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const toggleMock = () => {
     const next = !isMockMode;
@@ -29,7 +39,9 @@ export default function Navbar({ onOpenArch }) {
         padding: '14px 20px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12
       }}>
         {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -50,13 +62,23 @@ export default function Navbar({ onOpenArch }) {
               Apex<span style={{ color: 'var(--cyan)' }}>Pay</span>
             </h1>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: 0 }}>
-              Event-Driven Payment Platform
+              Event-Driven Payment Microservices
             </p>
           </div>
         </div>
 
         {/* Right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Audit Logs button */}
+          <button
+            onClick={onOpenAudit}
+            className="btn btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+            title="MongoDB Event Audit Trail Viewer"
+          >
+            <Database size={14} color="var(--cyan)" /> Audit Trail
+          </button>
+
           {/* Architecture trigger */}
           <button
             onClick={onOpenArch}
@@ -64,6 +86,17 @@ export default function Navbar({ onOpenArch }) {
             style={{ padding: '6px 12px', fontSize: '0.8rem' }}
           >
             <Layers size={14} /> Architecture
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="btn btn-secondary"
+            style={{ padding: '6px 10px' }}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={15} color="var(--warning)" /> : <Moon size={15} color="var(--primary)" />}
           </button>
 
           {/* Mode switch badge */}
@@ -93,6 +126,7 @@ export default function Navbar({ onOpenArch }) {
               className="btn btn-secondary"
               style={{ padding: '6px 10px' }}
               title="Logout"
+              aria-label="Logout"
             >
               <LogOut size={14} />
             </button>

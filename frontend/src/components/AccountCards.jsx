@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { addAccount } from '../store/accountsSlice';
 import { api } from '../services/api';
-import { Wallet, Copy, Check, Plus, UserPlus } from 'lucide-react';
+import { Wallet, Copy, Check, Plus, UserPlus, BookOpen } from 'lucide-react';
+import AccountLedgerModal from './AccountLedgerModal';
 
-export default function AccountCards() {
+export default function AccountCards({ onToast }) {
   const dispatch = useDispatch();
   const { list: accounts } = useSelector(state => state.accounts);
   const { token } = useSelector(state => state.auth);
 
   const [copiedId, setCopiedId] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [selectedLedgerAccount, setSelectedLedgerAccount] = useState(null);
   const [newOwner, setNewOwner] = useState('');
   const [newBalance, setNewBalance] = useState('1000.00');
   const [loading, setLoading] = useState(false);
@@ -18,6 +20,7 @@ export default function AccountCards() {
   const handleCopy = (id) => {
     navigator.clipboard.writeText(id);
     setCopiedId(id);
+    if (onToast) onToast("Account ID copied to clipboard!");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -34,6 +37,7 @@ export default function AccountCards() {
       setShowModal(false);
       setNewOwner('');
       setNewBalance('1000.00');
+      if (onToast) onToast(`Account created successfully for ${created.ownerName}!`);
     } catch (err) {
       alert(err.message || 'Failed to create account');
     } finally {
@@ -49,7 +53,7 @@ export default function AccountCards() {
             <Wallet size={18} color="var(--primary)" /> Bank Accounts Ledger
           </h2>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>
-            PostgreSQL <code className="mono">accounts</code> table &bull; Atomic Debit / Credit
+            PostgreSQL <code className="mono">accounts</code> &amp; <code className="mono">ledger_entries</code> &bull; Atomic Debit / Credit
           </p>
         </div>
         <button
@@ -114,7 +118,7 @@ export default function AccountCards() {
               </div>
             </div>
 
-            {/* Account ID row with copy */}
+            {/* Account ID row with copy & Ledger trigger */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -123,13 +127,15 @@ export default function AccountCards() {
               background: 'rgba(0, 0, 0, 0.25)',
               borderRadius: 'var(--radius-sm)',
               fontSize: '0.7rem',
-              color: 'var(--text-dim)'
+              color: 'var(--text-dim)',
+              marginBottom: 8
             }}>
               <span className="mono" title={acc.id}>
-                {acc.id.substring(0, 16)}...
+                {acc.id.substring(0, 14)}...
               </span>
               <button
                 onClick={() => handleCopy(acc.id)}
+                aria-label={`Copy account ID for ${acc.ownerName}`}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -145,34 +151,58 @@ export default function AccountCards() {
                 {copiedId === acc.id ? 'Copied' : 'Copy'}
               </button>
             </div>
+
+            {/* View Ledger & Statement Button */}
+            <button
+              onClick={() => setSelectedLedgerAccount(acc)}
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '6px 10px', fontSize: '0.75rem', justifyContent: 'center' }}
+            >
+              <BookOpen size={13} color="var(--primary)" /> View Ledger &amp; Statement
+            </button>
           </div>
         ))}
       </div>
 
+      {/* Account Ledger Modal */}
+      {selectedLedgerAccount && (
+        <AccountLedgerModal
+          account={selectedLedgerAccount}
+          onClose={() => setSelectedLedgerAccount(null)}
+          onToast={onToast}
+        />
+      )}
+
       {/* Modal for new account */}
       {showModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 50,
-          padding: 20
-        }}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-account-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+            padding: 20
+          }}
+        >
           <div className="glass-panel" style={{ width: '100%', maxWidth: 400, padding: 24 }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 id="new-account-title" style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <UserPlus size={18} color="var(--primary)" /> Open New Account
             </h3>
             <form onSubmit={handleCreate}>
               <div className="form-group">
-                <label className="form-label">Customer / Owner Name</label>
+                <label htmlFor="owner-name-input" className="form-label">Customer / Owner Name</label>
                 <input
+                  id="owner-name-input"
                   type="text"
                   className="form-control"
-                  placeholder="e.g. Aryan Pandey"
+                  placeholder="e.g. Vikram Mehta"
                   value={newOwner}
                   onChange={e => setNewOwner(e.target.value)}
                   required
@@ -180,8 +210,9 @@ export default function AccountCards() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Initial Balance (INR)</label>
+                <label htmlFor="balance-input" className="form-label">Initial Balance (INR)</label>
                 <input
+                  id="balance-input"
                   type="number"
                   step="0.01"
                   min="0"

@@ -165,5 +165,18 @@ Every file created in the project and the reason it exists.
 - `notification-service/src/main/java/com/payments/notification/api/AuditLogController.java`: REST controller exposing `GET /api/audit-logs` with eventType, correlationId, aggregateId, and date filters.
 - `api-gateway/src/main/resources/application.yml` and `docker-compose.yml`: Routed `/api/audit-logs/**` to `notification-service`.
 
+## Phase C: Frontend UI/UX
+- `frontend/package.json`: Added `recharts` for transaction spending and volume analytics.
+- `frontend/src/index.css`: Added light/dark mode CSS tokens (`[data-theme='light']`), accessible focus styles (`:focus-visible`), stepper timeline styles, and toast notification animations.
+- `frontend/src/components/SpendingChart.jsx`: Interactive Recharts `AreaChart` displaying transaction volume trends and total settled volume.
+- `frontend/src/components/StatusStepperModal.jsx`: Live 3-step payment lifecycle stepper (`INITIATED` -> `VALIDATED` -> `SETTLED`/`FAILED`) with automated status polling and failure badges.
+- `frontend/src/components/AccountLedgerModal.jsx`: Modal displaying full debit/credit ledger history per account with 1-click RFC 4180 CSV statement export.
+- `frontend/src/components/ConfirmationModal.jsx`: Pre-flight transfer review modal displaying sender, recipient, amount, and idempotency key.
+- `frontend/src/components/AuditLogViewerModal.jsx`: Admin MongoDB audit trail viewer querying Kafka events by event type and payment aggregate ID.
+- `frontend/src/components/Toast.jsx`: Lightweight non-intrusive notification toast component.
+- `frontend/src/components/Navbar.jsx`: Added dark/light theme switch, MongoDB audit trail trigger, and responsive mobile layout.
+- `frontend/src/services/api.js`: Enhanced with ledger, statement CSV export, timeline, and MongoDB audit log endpoints, with 100% offline mock fidelity for GitHub Pages.
+
+
 
 

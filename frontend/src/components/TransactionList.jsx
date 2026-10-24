@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
-import { Clock, CheckCircle2, XCircle, AlertTriangle, ArrowUpRight, Search } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, AlertTriangle, ArrowUpRight, Search, Eye } from 'lucide-react';
 
-export default function TransactionList() {
+export default function TransactionList({ onOpenStepper }) {
   const { list: payments } = useSelector(state => state.payments);
   const { list: accounts } = useSelector(state => state.accounts);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   const getAccountName = (id) => {
     const found = accounts.find(a => a.id === id);
@@ -13,6 +14,7 @@ export default function TransactionList() {
   };
 
   const filtered = payments.filter(p => {
+    if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
     const sender = getAccountName(p.senderAccountId).toLowerCase();
     const receiver = getAccountName(p.receiverAccountId).toLowerCase();
     const query = searchTerm.toLowerCase();
@@ -55,29 +57,52 @@ export default function TransactionList() {
   };
 
   return (
-    <div className="glass-panel" style={{ padding: 24, height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 10 }}>
+    <div className="glass-panel" style={{ padding: 24, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <ArrowUpRight size={18} color="var(--primary)" /> Live Payment Transactions
           </h2>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0 }}>
-            FR-16: Live Polling (2s interval) &bull; State Machine Lifecycle
+            FR-16: Live Polling (2s interval) &bull; Click row to view Live Status Stepper
           </p>
         </div>
 
-        {/* Search filter */}
+        {/* Search input */}
         <div style={{ position: 'relative', width: 220 }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: 12, color: 'var(--text-dim)' }} />
+          <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: 'var(--text-dim)' }} />
           <input
             type="text"
             className="form-control"
-            style={{ paddingLeft: 32, paddingRight: 10, paddingTop: 8, paddingBottom: 8, fontSize: '0.8rem' }}
-            placeholder="Search transactions..."
+            style={{ paddingLeft: 32, paddingRight: 10, paddingTop: 6, paddingBottom: 6, fontSize: '0.8rem' }}
+            placeholder="Search payments..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
+        {['ALL', 'INITIATED', 'VALIDATED', 'SETTLED', 'FAILED'].map(st => (
+          <button
+            key={st}
+            onClick={() => setStatusFilter(st)}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: statusFilter === st ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+              border: `1px solid ${statusFilter === st ? 'var(--primary)' : 'var(--border-color)'}`,
+              color: statusFilter === st ? '#fff' : 'var(--text-muted)',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {st}
+          </button>
+        ))}
       </div>
 
       {filtered.length === 0 ? (
@@ -93,7 +118,7 @@ export default function TransactionList() {
           <span style={{ fontSize: '0.75rem' }}>Initiate a transfer using the form on the left!</span>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', flex: 1 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-dim)', textTransform: 'uppercase', fontSize: '0.7rem' }}>
@@ -101,18 +126,20 @@ export default function TransactionList() {
                 <th style={{ padding: '10px 8px' }}>Transfer Route</th>
                 <th style={{ padding: '10px 8px' }}>Amount</th>
                 <th style={{ padding: '10px 8px' }}>Status</th>
-                <th style={{ padding: '10px 8px' }}>Idempotency / Detail</th>
+                <th style={{ padding: '10px 8px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(p => (
                 <tr
                   key={p.id}
+                  onClick={() => onOpenStepper && onOpenStepper(p.id)}
                   style={{
                     borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                    cursor: 'pointer',
                     transition: 'background 0.15s ease'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   {/* ID / Time */}
@@ -151,11 +178,19 @@ export default function TransactionList() {
                     )}
                   </td>
 
-                  {/* Idempotency Key / detail */}
+                  {/* Stepper click trigger */}
                   <td style={{ padding: '12px 8px' }}>
-                    <span className="mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }} title={p.idempotencyKey}>
-                      {p.idempotencyKey.length > 16 ? p.idempotencyKey.substring(0, 16) + '...' : p.idempotencyKey}
-                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenStepper) onOpenStepper(p.id);
+                      }}
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 8px', fontSize: '0.7rem', gap: 4 }}
+                      title="Inspect lifecycle stepper"
+                    >
+                      <Eye size={12} color="var(--primary)" /> Stepper
+                    </button>
                   </td>
                 </tr>
               ))}

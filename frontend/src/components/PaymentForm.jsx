@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { paymentInitiated, setSubmitting, setPaymentError, clearMessages } from '../store/paymentsSlice';
 import { api } from '../services/api';
-import { Send, Key, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Send, Key, AlertCircle, CheckCircle2, RefreshCw, UserCheck } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
-export default function PaymentForm() {
+export default function PaymentForm({ onOpenStepper, onToast }) {
   const dispatch = useDispatch();
   const { list: accounts } = useSelector(state => state.accounts);
   const { token } = useSelector(state => state.auth);
@@ -14,6 +15,7 @@ export default function PaymentForm() {
   const [receiverId, setReceiverId] = useState('');
   const [amount, setAmount] = useState('500.00');
   const [idempotencyKey, setIdempotencyKey] = useState(crypto.randomUUID());
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Set default sender and receiver when accounts load
   useEffect(() => {
@@ -24,10 +26,12 @@ export default function PaymentForm() {
   }, [accounts]);
 
   const generateNewKey = () => {
-    setIdempotencyKey(crypto.randomUUID());
+    const newKey = crypto.randomUUID();
+    setIdempotencyKey(newKey);
+    if (onToast) onToast("Generated fresh Idempotency Key!");
   };
 
-  const handleSubmit = async (e) => {
+  const handlePreSubmit = (e) => {
     e.preventDefault();
     if (senderId === receiverId) {
       dispatch(setPaymentError("Sender and Receiver account cannot be the same."));
@@ -37,7 +41,11 @@ export default function PaymentForm() {
       dispatch(setPaymentError("Amount must be strictly greater than zero."));
       return;
     }
+    setShowConfirm(true);
+  };
 
+  const handleConfirmedTransfer = async () => {
+    setShowConfirm(false);
     dispatch(setSubmitting(true));
     try {
       const payment = await api.initiatePayment(token, {
@@ -49,6 +57,9 @@ export default function PaymentForm() {
       });
 
       dispatch(paymentInitiated(payment));
+      if (onToast) onToast(`Payment initiated! Tracking in live stepper.`);
+      if (onOpenStepper) onOpenStepper(payment.id);
+
       // Generate a new idempotency key ready for the next transfer
       generateNewKey();
     } catch (err) {
@@ -57,6 +68,7 @@ export default function PaymentForm() {
   };
 
   const senderAccount = accounts.find(a => a.id === senderId);
+  const receiverAccount = accounts.find(a => a.id === receiverId);
 
   return (
     <div className="glass-panel" style={{ padding: 24, height: '100%' }}>
@@ -105,11 +117,12 @@ export default function PaymentForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        {/* Sender select */}
+      <form onSubmit={handlePreSubmit}>
+        {/* Sender select & balance lookup */}
         <div className="form-group">
-          <label className="form-label">From Account (Sender)</label>
+          <label htmlFor="sender-select" className="form-label">From Account (Sender)</label>
           <select
+            id="sender-select"
             className="form-control"
             value={senderId}
             onChange={e => {
@@ -120,16 +133,22 @@ export default function PaymentForm() {
           >
             {accounts.map(acc => (
               <option key={acc.id} value={acc.id}>
-                {acc.ownerName} &bull; ₹{acc.balance.toFixed(2)}
+                {acc.ownerName} &bull; Available: ₹{acc.balance.toFixed(2)}
               </option>
             ))}
           </select>
+          {senderAccount && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <UserCheck size={11} color="var(--success)" /> Verified Account &bull; Balance: ₹{senderAccount.balance.toFixed(2)}
+            </div>
+          )}
         </div>
 
-        {/* Receiver select */}
+        {/* Receiver select & lookup */}
         <div className="form-group">
-          <label className="form-label">To Account (Beneficiary)</label>
+          <label htmlFor="receiver-select" className="form-label">To Account (Beneficiary)</label>
           <select
+            id="receiver-select"
             className="form-control"
             value={receiverId}
             onChange={e => {
@@ -148,8 +167,9 @@ export default function PaymentForm() {
 
         {/* Amount */}
         <div className="form-group">
-          <label className="form-label">Transfer Amount (INR)</label>
+          <label htmlFor="amount-input" className="form-label">Transfer Amount (INR)</label>
           <input
+            id="amount-input"
             type="number"
             step="0.01"
             min="0.01"
@@ -171,7 +191,7 @@ export default function PaymentForm() {
                 type="button"
                 onClick={() => setAmount(val)}
                 style={{
-                  background: val === '60000.00' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                  background: val === '60000.00' ? 'var(--danger-bg)' : 'rgba(255, 255, 255, 0.05)',
                   border: `1px solid ${val === '60000.00' ? 'rgba(244, 63, 94, 0.3)' : 'var(--border-color)'}`,
                   color: val === '60000.00' ? 'var(--danger)' : 'var(--text-muted)',
                   fontSize: '0.7rem',
@@ -233,11 +253,27 @@ export default function PaymentForm() {
             </span>
           ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Send size={16} /> Send ₹{parseFloat(amount || 0).toLocaleString()} Now
+              <Send size={16} /> Review &amp; Send ₹{parseFloat(amount || 0).toLocaleString()}
             </span>
           )}
         </button>
       </form>
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <ConfirmationModal
+          details={{
+            senderName: senderAccount?.ownerName || 'Sender',
+            receiverName: receiverAccount?.ownerName || 'Receiver',
+            amount: parseFloat(amount),
+            currency: 'INR',
+            idempotencyKey
+          }}
+          isSubmitting={isSubmitting}
+          onConfirm={handleConfirmedTransfer}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 }
