@@ -414,6 +414,13 @@ Every service and operation handling money in this platform must adhere to the f
    - Standardized Spring Boot Actuator `/actuator/health` (liveness and readiness probes) across all microservices.
    - Prometheus metrics endpoint `/actuator/prometheus` enabled on all services with custom business metrics.
    - Actuator endpoints restricted to internal cluster network; blocked from public gateway routing.
+8. **Container Hardening & Orchestration**:
+   - Multi-stage Dockerfiles compiling with Temurin 21 and packaging into minimal Alpine runtimes.
+   - Immutable non-root execution (`appuser:appgroup`, UID/GID 10001).
+   - Container-aware JVM cgroup limits (`-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0`).
+   - Integrated Docker healthchecks (`/actuator/health/liveness`) and `depends_on: condition: service_healthy` startup orchestration.
+   - Decoupled Compose stack: core transactional microservices in `docker-compose.yml`, observability stack (Prometheus, Grafana, ELK) in `docker-compose.observability.yml`, and code quality (SonarQube) in `docker-compose.quality.yml`.
+   - Resource profiling: Core stack requires ~3.5 GB RAM; Observability + Quality requires ~4 GB combined.
 
 ---
 

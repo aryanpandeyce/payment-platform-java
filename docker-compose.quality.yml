@@ -1,0 +1,53 @@
+# ==============================================================================
+# ApexPay Code Quality & Security Scanning Stack (Optional Extension)
+# Memory Requirement: ~2 GB RAM (SonarQube JVM + Postgres)
+# Combined with Elasticsearch: ~4 GB RAM required across both stacks.
+# Usage: docker compose -f docker-compose.quality.yml up -d
+# Access: SonarQube UI available at http://localhost:9000 (admin / admin)
+# ==============================================================================
+
+services:
+  # 1. Dedicated PostgreSQL for SonarQube (Port 5434)
+  sonar-postgres:
+    image: postgres:16.8-alpine
+    container_name: apexpay-sonar-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: ${SONAR_JDBC_USERNAME:-sonar}
+      POSTGRES_PASSWORD: ${SONAR_JDBC_PASSWORD:-change_me}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SONAR_JDBC_USERNAME:-sonar} -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # 2. SonarQube Community Edition (Port 9000)
+  sonarqube:
+    image: sonarqube:10.7-community
+    container_name: apexpay-sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_USERNAME: ${SONAR_JDBC_USERNAME:-sonar}
+      SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD:-change_me}
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-postgres:5432/sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    depends_on:
+      sonar-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sonar_pg_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

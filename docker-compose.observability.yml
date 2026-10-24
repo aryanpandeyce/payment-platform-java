@@ -1,0 +1,83 @@
+# ==============================================================================
+# ApexPay Observability Stack (Optional Extension)
+# Memory Requirement: ~2.5 GB RAM (Elasticsearch uses 512MB heap; Kibana ~1GB)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# ==============================================================================
+
+services:
+  # 1. Prometheus Metrics Scraper (Port 9090)
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: apexpay-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+
+  # 2. Grafana Dashboards (Port 3000)
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: apexpay-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # 3. Elasticsearch (Single-Node, Free Dev Tier, Port 9200)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.3
+    container_name: apexpay-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      # Security disabled for local lightweight developer testing only
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  # 4. Kibana (Log Search & Tracing UI, Port 5601)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.17.3
+    container_name: apexpay-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  # 5. Fluent Bit Log Shipper (Port 24224)
+  fluent-bit:
+    image: fluent/fluent-bit:3.2.6
+    container_name: apexpay-fluent-bit
+    ports:
+      - "24224:24224"
+    volumes:
+      - ./deploy/observability/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  es_data:
