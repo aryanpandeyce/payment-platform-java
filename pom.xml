@@ -36,7 +36,7 @@
         <jjwt.version>0.12.6</jjwt.version>
         <jacoco.version>0.8.12</jacoco.version>
         <maven-enforcer.version>3.5.0</maven-enforcer.version>
-        <logstash-logback.version>8.0</logstash-logback.version>
+        <logstash-logback.version>9.0</logstash-logback.version>
     </properties>
 
     <dependencyManagement>
