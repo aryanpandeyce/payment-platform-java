@@ -50,7 +50,7 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: "-Duser.timezone=Asia/Kolkata"
 
-  frontend-build:
+  build-frontend:
     name: Build Frontend (Mock Mode)
     runs-on: ubuntu-latest
 
@@ -65,7 +65,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: Build React Dashboard (Mock Mode Enabled)
         working-directory: frontend
@@ -73,7 +73,6 @@ jobs:
         env:
           VITE_USE_MOCK: "true"
           VITE_BASE_PATH: "/payment-platform-java/"
-
 
       - name: Setup Pages
         if: github.ref == 'refs/heads/main'
@@ -88,7 +87,11 @@ jobs:
   deploy-pages:
     name: Deploy Mock Dashboard to GitHub Pages
     if: github.ref == 'refs/heads/main'
-    needs: [backend-test, frontend-build]
+    needs: build-frontend
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
