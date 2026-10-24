@@ -2,6 +2,7 @@ package com.payments.account.api;
 
 import com.payments.account.api.dto.ErrorResponse;
 import com.payments.account.domain.AccountNotFoundException;
+import com.payments.account.domain.ForbiddenException;
 import com.payments.account.domain.InsufficientFundsException;
 import com.payments.account.domain.InvalidAmountException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,6 +57,13 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), errorCode, errors, request.getRequestURI()));
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex, HttpServletRequest request) {
+        log.warn("Forbidden account access: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "FORBIDDEN", ex.getMessage(), request.getRequestURI()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setAccounts } from './store/accountsSlice';
 import { setPayments } from './store/paymentsSlice';
-import { api } from './services/api';
+import { logout } from './store/authSlice';
+import { api, setAuthCallback } from './services/api';
 import Navbar from './components/Navbar';
 import LoginView from './components/LoginView';
+import AdminDashboard from './components/AdminDashboard';
 import AccountCards from './components/AccountCards';
 import PaymentForm from './components/PaymentForm';
 import TransactionList from './components/TransactionList';
@@ -16,11 +18,19 @@ import Toast from './components/Toast';
 
 export default function App() {
   const dispatch = useDispatch();
-  const { isAuthenticated, token } = useSelector(state => state.auth);
+  const { isAuthenticated, user, token } = useSelector(state => state.auth);
   const [showArch, setShowArch] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [stepperPaymentId, setStepperPaymentId] = useState(null);
   const [toasts, setToasts] = useState([]);
+
+  // Register session expiration callback
+  useEffect(() => {
+    setAuthCallback(() => {
+      dispatch(logout());
+      addToast("Session expired or token invalid. Please log in again.", "error");
+    });
+  }, [dispatch]);
 
   const addToast = (message, type = 'success') => {
     const id = crypto.randomUUID();
@@ -34,7 +44,7 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Poll accounts and transactions every 2 seconds for live status
+  // Poll accounts and transactions every 3 seconds for live balance & payment state
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -52,12 +62,12 @@ export default function App() {
     };
 
     fetchData(); // initial fetch
-    const timer = setInterval(fetchData, 2000); // 2 second poll
+    const timer = setInterval(fetchData, 3000); // 3 second poll
 
     return () => clearInterval(timer);
-  }, [isAuthenticated, token, dispatch]);
+  }, [isAuthenticated, token, user, dispatch]);
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return <LoginView />;
   }
 
@@ -75,27 +85,46 @@ export default function App() {
         margin: '0 auto',
         padding: '24px 20px 48px 20px'
       }}>
-        {/* Top: Accounts ledger balances */}
-        <AccountCards onToast={msg => addToast(msg, 'success')} />
-
-        {/* Middle: Spending Chart */}
-        <SpendingChart />
-
-        {/* Bottom split: Payment Initiation Form & Live Transactions */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-          gap: 20,
-          alignItems: 'start'
-        }}>
-          <PaymentForm
+        {user.role === 'ADMIN' ? (
+          /* ============================================================
+             ADMIN VIEW (Aryan Pandey): System-wide oversight, User
+             Management, Platform metrics, Observability links, Audit
+             ============================================================ */
+          <AdminDashboard
+            onOpenAudit={() => setShowAudit(true)}
+            onOpenArch={() => setShowArch(true)}
             onOpenStepper={id => setStepperPaymentId(id)}
-            onToast={msg => addToast(msg, 'info')}
+            onToast={(msg, type) => addToast(msg, type)}
           />
-          <TransactionList
-            onOpenStepper={id => setStepperPaymentId(id)}
-          />
-        </div>
+        ) : (
+          /* ============================================================
+             USER VIEW: Own Accounts, Spending Chart, Transfer Form,
+             Live Transaction Stepper
+             ============================================================ */
+          <div>
+            {/* Top: Accounts ledger balances */}
+            <AccountCards onToast={msg => addToast(msg, 'success')} />
+
+            {/* Middle: Spending Chart */}
+            <SpendingChart />
+
+            {/* Bottom split: Payment Initiation Form & Live Transactions */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gap: 20,
+              alignItems: 'start'
+            }}>
+              <PaymentForm
+                onOpenStepper={id => setStepperPaymentId(id)}
+                onToast={msg => addToast(msg, 'info')}
+              />
+              <TransactionList
+                onOpenStepper={id => setStepperPaymentId(id)}
+              />
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Live Status Stepper Modal */}

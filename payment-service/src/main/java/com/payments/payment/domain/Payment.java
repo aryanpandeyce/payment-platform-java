@@ -21,6 +21,9 @@ public class Payment {
     @Column(name = "idempotency_key", nullable = false, unique = true, updatable = false)
     private String idempotencyKey;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
     @Column(name = "sender_account_id", nullable = false, updatable = false)
     private UUID senderAccountId;
 
@@ -55,6 +58,10 @@ public class Payment {
     }
 
     public Payment(String idempotencyKey, UUID senderAccountId, UUID receiverAccountId, BigDecimal amount, String currency) {
+        this(idempotencyKey, senderAccountId, receiverAccountId, amount, currency, null);
+    }
+
+    public Payment(String idempotencyKey, UUID senderAccountId, UUID receiverAccountId, BigDecimal amount, String currency, UUID userId) {
         if (idempotencyKey == null || idempotencyKey.trim().isEmpty()) {
             throw new IllegalArgumentException("Idempotency key is required");
         }
@@ -75,6 +82,7 @@ public class Payment {
         this.amount = amount.setScale(2, RoundingMode.HALF_EVEN);
         this.currency = (currency == null || currency.trim().isEmpty()) ? "INR" : currency.trim().toUpperCase();
         this.status = PaymentStatus.INITIATED;
+        this.userId = userId;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -150,5 +158,9 @@ public class Payment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public UUID getUserId() {
+        return userId;
     }
 }

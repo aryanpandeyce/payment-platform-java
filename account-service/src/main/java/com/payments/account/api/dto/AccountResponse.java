@@ -12,6 +12,9 @@ public record AccountResponse(
         @Schema(description = "Unique account identifier", example = "a1000000-0000-0000-0000-000000000001")
         UUID id,
 
+        @Schema(description = "Owner user ID for RBAC", example = "00000000-0000-0000-0000-000000000001")
+        UUID ownerUserId,
+
         @Schema(description = "Account holder name", example = "Rahul Sharma")
         String ownerName,
 
@@ -30,6 +33,7 @@ public record AccountResponse(
     public static AccountResponse from(Account account) {
         return new AccountResponse(
                 account.getId(),
+                account.getOwnerUserId(),
                 account.getOwnerName(),
                 account.getBalance(),
                 account.getCurrency(),

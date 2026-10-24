@@ -1,35 +1,51 @@
 import { createSlice } from '@reduxjs/toolkit';
 import { getMockMode } from '../services/api';
 
-const initialToken = localStorage.getItem('apexpay_token') || (getMockMode() ? 'mock-demo-token' : null);
-const initialUser = localStorage.getItem('apexpay_user') || 'admin';
-
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
-    token: initialToken,
-    username: initialUser,
-    isAuthenticated: !!initialToken,
+    token: null,           // In-memory access token (JWT), NEVER stored in localStorage
+    refreshToken: null,    // In-memory refresh token, NEVER stored in localStorage
+    user: null,            // { id, username, email, fullName, role, status }
+    isAuthenticated: false,
     isMockMode: getMockMode(),
     loading: false,
     error: null
   },
   reducers: {
     loginSuccess: (state, action) => {
-      state.token = action.payload.token;
-      state.username = action.payload.username;
+      state.token = action.payload.accessToken;
+      state.refreshToken = action.payload.refreshToken;
+      state.user = {
+        id: action.payload.userId,
+        username: action.payload.username,
+        email: action.payload.email,
+        fullName: action.payload.fullName,
+        role: action.payload.role,
+        status: action.payload.status || 'ACTIVE'
+      };
       state.isAuthenticated = true;
       state.loading = false;
       state.error = null;
-      localStorage.setItem('apexpay_token', action.payload.token);
-      localStorage.setItem('apexpay_user', action.payload.username);
+    },
+    tokenRefreshed: (state, action) => {
+      state.token = action.payload.accessToken;
+      if (action.payload.refreshToken) {
+        state.refreshToken = action.payload.refreshToken;
+      }
+    },
+    updateUserProfile: (state, action) => {
+      if (state.user) {
+        state.user = { ...state.user, ...action.payload };
+      }
     },
     logout: (state) => {
       state.token = null;
-      state.username = null;
+      state.refreshToken = null;
+      state.user = null;
       state.isAuthenticated = false;
-      localStorage.removeItem('apexpay_token');
-      localStorage.removeItem('apexpay_user');
+      state.loading = false;
+      state.error = null;
     },
     setMockModeState: (state, action) => {
       state.isMockMode = action.payload;
@@ -44,5 +60,14 @@ const authSlice = createSlice({
   }
 });
 
-export const { loginSuccess, logout, setMockModeState, setLoading, setError } = authSlice.actions;
+export const {
+  loginSuccess,
+  tokenRefreshed,
+  updateUserProfile,
+  logout,
+  setMockModeState,
+  setLoading,
+  setError
+} = authSlice.actions;
+
 export default authSlice.reducer;

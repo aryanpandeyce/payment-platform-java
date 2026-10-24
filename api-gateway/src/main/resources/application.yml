@@ -9,6 +9,18 @@ spring:
   cloud:
     gateway:
       routes:
+        # Route 0a: Identity Service Auth (Port 8084)
+        - id: identity-service-auth
+          uri: ${IDENTITY_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/auth/**
+
+        # Route 0b: Identity Service Users (Port 8084)
+        - id: identity-service-users
+          uri: ${IDENTITY_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/users/**
+
         # Route 1: Account Service (Port 8085)
         - id: account-service
           uri: ${ACCOUNT_SERVICE_URL:http://localhost:8085}
@@ -31,13 +43,8 @@ jwt:
   secret: ${JWT_SECRET:supersecretjwtkeythatisatleast256bitslongforhmacsha256signing}
   expiration-ms: 86400000 # 24 hours
 
-auth:
-  demo-user:
-    username: ${DEMO_USER_USERNAME:admin}
-    password: ${DEMO_USER_PASSWORD:password}
-
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus

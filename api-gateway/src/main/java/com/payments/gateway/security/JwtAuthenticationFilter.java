@@ -1,5 +1,6 @@
 package com.payments.gateway.security;
 
+import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -13,7 +14,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 // @Component: Spring Cloud Gateway GlobalFilter
-// Downstream microservices par jaane se pehle JWT token validate karta hai aur X-User-Id inject karta hai
+// Downstream microservices par jaane se pehle JWT token validate karta hai aur X-User-Id, X-User-Role inject karta hai
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
@@ -28,11 +29,10 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // Public endpoints skip karo (Login, Actuator, Swagger UI)
+        // Public endpoints skip karo (Auth, Actuator, Swagger UI)
         if (path.startsWith("/auth/") || path.startsWith("/actuator/") || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
             return chain.filter(exchange);
         }
-
 
         // Authorization header check
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -46,11 +46,16 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
         try {
             // Verify JWT signature and expiration
-            String username = jwtUtil.extractUsername(token);
+            Claims claims = jwtUtil.validateToken(token);
+            String userId = claims.getSubject();
+            String username = claims.get("username", String.class) != null ? claims.get("username", String.class) : userId;
+            String role = claims.get("role", String.class) != null ? claims.get("role", String.class) : "USER";
 
-            // Invariant FR-14: Inject X-User-Id header downstream
+            // Invariant FR-14 & FR-21: Forward verified X-User-Id, X-User-Role, and X-User-Name downstream
             ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
-                    .header("X-User-Id", username)
+                    .header("X-User-Id", userId)
+                    .header("X-User-Role", role)
+                    .header("X-User-Name", username)
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());

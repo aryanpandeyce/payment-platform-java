@@ -10,7 +10,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
-// @Component: Stateless JWT token generation aur verification utility
+// @Component: Stateless JWT token generation and verification utility
 @Component
 public class JwtUtil {
 
@@ -24,13 +24,18 @@ public class JwtUtil {
         this.expirationMs = expirationMs;
     }
 
-    // Token banata hai jisme username subject claim mein hota hai
     public String generateToken(String username) {
+        return generateToken(username, username, "USER");
+    }
+
+    public String generateToken(String userId, String username, String role) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
-                .subject(username)
+                .subject(userId)
+                .claim("username", username)
+                .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -47,6 +52,18 @@ public class JwtUtil {
     }
 
     public String extractUsername(String token) {
+        Claims claims = validateToken(token);
+        String username = claims.get("username", String.class);
+        return username != null ? username : claims.getSubject();
+    }
+
+    public String extractUserId(String token) {
         return validateToken(token).getSubject();
+    }
+
+    public String extractRole(String token) {
+        Claims claims = validateToken(token);
+        String role = claims.get("role", String.class);
+        return role != null ? role : "USER";
     }
 }

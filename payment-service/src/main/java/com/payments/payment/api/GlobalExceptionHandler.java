@@ -1,6 +1,7 @@
 package com.payments.payment.api;
 
 import com.payments.payment.api.dto.ErrorResponse;
+import com.payments.payment.domain.ForbiddenException;
 import com.payments.payment.domain.IdempotencyPayloadMismatchException;
 import com.payments.payment.domain.InvalidStateTransitionException;
 import com.payments.payment.domain.PaymentNotFoundException;
@@ -21,6 +22,13 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException ex, HttpServletRequest request) {
+        log.warn("Forbidden payment access: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of(HttpStatus.FORBIDDEN.value(), "FORBIDDEN", ex.getMessage(), request.getRequestURI()));
+    }
 
     @ExceptionHandler(PaymentNotFoundException.class)
     public ResponseEntity<ErrorResponse> handlePaymentNotFound(PaymentNotFoundException ex, HttpServletRequest request) {

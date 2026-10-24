@@ -23,6 +23,9 @@ public class Account {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    @Column(name = "owner_user_id")
+    private UUID ownerUserId;
+
     @Column(name = "owner_name", nullable = false)
     private String ownerName;
 
@@ -54,11 +57,16 @@ public class Account {
 
     // Public constructor: default currency INR
     public Account(String ownerName, BigDecimal initialBalance) {
-        this(ownerName, initialBalance, "INR");
+        this(ownerName, initialBalance, "INR", null);
     }
 
     // Overloaded constructor: currency customize karne ke liye
     public Account(String ownerName, BigDecimal initialBalance, String currency) {
+        this(ownerName, initialBalance, currency, null);
+    }
+
+    // Overloaded constructor: RBAC user ownership ke liye
+    public Account(String ownerName, BigDecimal initialBalance, String currency, UUID ownerUserId) {
         if (ownerName == null || ownerName.trim().isEmpty()) {
             throw new IllegalArgumentException("Owner name cannot be empty");
         }
@@ -72,6 +80,7 @@ public class Account {
         this.balance = initialBalance.setScale(2, RoundingMode.HALF_EVEN);
         this.currency = (currency == null || currency.trim().isEmpty()) ? "INR" : currency.trim().toUpperCase();
         this.status = "ACTIVE";
+        this.ownerUserId = ownerUserId;
         this.createdAt = Instant.now();
     }
 
@@ -122,5 +131,9 @@ public class Account {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public UUID getOwnerUserId() {
+        return ownerUserId;
     }
 }

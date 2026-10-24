@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  application:
+    name: identity-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/identity_db}
+    username: ${DB_USERNAME:payments}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+jwt:
+  secret: ${JWT_SECRET:supersecretjwtkeythatisatleast256bitslongforhmacsha256signing}
+  access-token-expiration-seconds: ${JWT_EXPIRATION_SECONDS:900} # 15 minutes
+  refresh-token-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:604800} # 7 days
+
+seed:
+  admin-password: ${SEED_ADMIN_PASSWORD:AryanAdmin#2026}
+  user-password: ${SEED_USER_PASSWORD:DemoUser#2026}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized

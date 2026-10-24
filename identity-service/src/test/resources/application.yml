@@ -1,0 +1,30 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: identity-service-test
+
+  datasource:
+    url: jdbc:h2:mem:identity_testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+jwt:
+  secret: supersecretjwtkeythatisatleast256bitslongforhmacsha256signing
+  access-token-expiration-seconds: 900
+  refresh-token-expiration-seconds: 604800
+
+seed:
+  admin-password: AryanAdmin#2026
+  user-password: DemoUser#2026

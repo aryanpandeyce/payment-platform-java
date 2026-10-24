@@ -4,17 +4,16 @@ import com.payments.account.api.dto.AccountResponse;
 import com.payments.account.api.dto.BalanceResponse;
 import com.payments.account.api.dto.CreateAccountRequest;
 import com.payments.account.api.dto.LedgerEntryResponse;
-import com.payments.account.domain.Account;
-import com.payments.account.domain.AccountNotFoundException;
-import com.payments.account.domain.EntryType;
-import com.payments.account.domain.InvalidAmountException;
-import com.payments.account.domain.LedgerEntry;
+import com.payments.account.domain.*;
 import com.payments.account.infrastructure.persistence.AccountRepository;
 import com.payments.account.infrastructure.persistence.LedgerEntryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.math.BigDecimal;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,15 +31,18 @@ public class AccountService {
 
     // FR-1: Create account with initial balance and log opening ledger entry
     @Transactional
-    public AccountResponse createAccount(CreateAccountRequest request) {
+    public AccountResponse createAccount(CreateAccountRequest request, UUID requestingUserId, String role) {
         if (request.initialBalance() != null && request.initialBalance().compareTo(BigDecimal.ZERO) < 0) {
             throw new InvalidAmountException("Initial balance cannot be negative");
         }
 
+        UUID ownerId = request.ownerUserId() != null ? request.ownerUserId() : requestingUserId;
+
         Account account = new Account(
                 request.ownerName(),
                 request.initialBalance(),
-                request.currency()
+                request.currency(),
+                ownerId
         );
 
         Account saved = accountRepository.save(account);
@@ -59,29 +61,56 @@ public class AccountService {
         return AccountResponse.from(saved);
     }
 
-    // Get all accounts
+    public AccountResponse createAccount(CreateAccountRequest request) {
+        return createAccount(request, null, null);
+    }
+
+    // FR-21: List accounts with RBAC (Admin sees all; User sees only their own accounts)
     @Transactional(readOnly = true)
-    public List<AccountResponse> getAllAccounts() {
-        return accountRepository.findAll()
+    public List<AccountResponse> getAllAccounts(UUID requestingUserId, String role) {
+        if ("ADMIN".equalsIgnoreCase(role) || requestingUserId == null) {
+            return accountRepository.findAll()
+                    .stream()
+                    .map(AccountResponse::from)
+                    .toList();
+        }
+        return accountRepository.findByOwnerUserId(requestingUserId)
                 .stream()
                 .map(AccountResponse::from)
                 .toList();
     }
 
-    // FR-2: Get account details by ID
     @Transactional(readOnly = true)
-    public AccountResponse getAccount(UUID id) {
+    public List<AccountResponse> getAllAccounts() {
+        return getAllAccounts(null, null);
+    }
+
+    // FR-2 & FR-21: Get account details by ID with RBAC check
+    @Transactional(readOnly = true)
+    public AccountResponse getAccount(UUID id, UUID requestingUserId, String role) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new AccountNotFoundException(id));
+        validateOwnership(account, requestingUserId, role);
         return AccountResponse.from(account);
     }
 
-    // FR-2: Get account balance
     @Transactional(readOnly = true)
-    public BalanceResponse getBalance(UUID id) {
+    public AccountResponse getAccount(UUID id) {
+        return getAccount(id, null, null);
+    }
+
+    // FR-2 & FR-21: Get account balance with RBAC check
+    @Transactional(readOnly = true)
+    public BalanceResponse getBalance(UUID id, UUID requestingUserId, String role) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new AccountNotFoundException(id));
+        validateOwnership(account, requestingUserId, role);
         return new BalanceResponse(account.getId(), account.getBalance(), account.getCurrency(), account.getStatus());
+    }
+
+    @Transactional(readOnly = true)
+    public BalanceResponse getBalance(UUID id) {
+        return getBalance(id, null, null);
     }
 
     // FR-3: Debit funds atomically and record ledger entry
@@ -126,23 +155,16 @@ public class AccountService {
         return AccountResponse.from(saved);
     }
 
-    // Atomic Transfer with reference ID
+    // Coordinated settlement transfer between two accounts
     @Transactional
     public void transfer(UUID senderId, UUID receiverId, BigDecimal amount, String referenceId) {
-        if (senderId.equals(receiverId)) {
-            throw new IllegalArgumentException("Sender and receiver account cannot be the same");
-        }
-
         Account sender = accountRepository.findById(senderId)
-                .orElseThrow(() -> new AccountNotFoundException("Sender account not found: " + senderId));
+                .orElseThrow(() -> new AccountNotFoundException(senderId));
         Account receiver = accountRepository.findById(receiverId)
-                .orElseThrow(() -> new AccountNotFoundException("Receiver account not found: " + receiverId));
+                .orElseThrow(() -> new AccountNotFoundException(receiverId));
 
         sender.debit(amount);
-        receiver.credit(amount);
-
         accountRepository.save(sender);
-        accountRepository.save(receiver);
 
         ledgerEntryRepository.save(new LedgerEntry(
                 sender.getId(),
@@ -150,8 +172,11 @@ public class AccountService {
                 amount,
                 sender.getBalance(),
                 referenceId,
-                "Transfer to " + receiver.getOwnerName()
+                "Transfer to Account " + receiver.getId()
         ));
+
+        receiver.credit(amount);
+        accountRepository.save(receiver);
 
         ledgerEntryRepository.save(new LedgerEntry(
                 receiver.getId(),
@@ -159,56 +184,73 @@ public class AccountService {
                 amount,
                 receiver.getBalance(),
                 referenceId,
-                "Transfer from " + sender.getOwnerName()
+                "Transfer from Account " + sender.getId()
         ));
     }
 
-    @Transactional
-    public void transfer(UUID senderId, UUID receiverId, BigDecimal amount) {
-        transfer(senderId, receiverId, amount, null);
-    }
-
-    // Phase B: Get transaction history (ledger entries)
+    // Get ledger transaction history with RBAC check
     @Transactional(readOnly = true)
-    public List<LedgerEntryResponse> getTransactions(UUID accountId) {
-        if (!accountRepository.existsById(accountId)) {
-            throw new AccountNotFoundException(accountId);
-        }
-        return ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountId)
+    public List<LedgerEntryResponse> getTransactions(UUID id, UUID requestingUserId, String role) {
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AccountNotFoundException(id));
+        validateOwnership(account, requestingUserId, role);
+
+        return ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(id)
                 .stream()
                 .map(LedgerEntryResponse::from)
                 .toList();
     }
 
-    // Phase B: Statement CSV export
     @Transactional(readOnly = true)
-    public String exportStatementCsv(UUID accountId) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new AccountNotFoundException(accountId));
-
-        List<LedgerEntry> entries = ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("TransactionId,AccountId,OwnerName,Timestamp,Type,Amount,BalanceAfter,ReferenceId,Description\n");
-        for (LedgerEntry entry : entries) {
-            sb.append(entry.getId()).append(",")
-                    .append(entry.getAccountId()).append(",")
-                    .append(escapeCsv(account.getOwnerName())).append(",")
-                    .append(entry.getCreatedAt()).append(",")
-                    .append(entry.getEntryType()).append(",")
-                    .append(entry.getAmount()).append(",")
-                    .append(entry.getBalanceAfter()).append(",")
-                    .append(entry.getReferenceId() == null ? "" : escapeCsv(entry.getReferenceId())).append(",")
-                    .append(entry.getDescription() == null ? "" : escapeCsv(entry.getDescription())).append("\n");
-        }
-        return sb.toString();
+    public List<LedgerEntryResponse> getTransactions(UUID id) {
+        return getTransactions(id, null, null);
     }
 
-    private String escapeCsv(String value) {
-        if (value == null) return "";
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
+    // Export account statement as CSV with RBAC check
+    @Transactional(readOnly = true)
+    public String exportStatementCsv(UUID id, UUID requestingUserId, String role) {
+        Account account = accountRepository.findById(id)
+                .orElseThrow(() -> new AccountNotFoundException(id));
+        validateOwnership(account, requestingUserId, role);
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(id);
+
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+
+        pw.println("TransactionId,AccountId,OwnerName,Timestamp,Type,Amount,BalanceAfter,ReferenceId,Description");
+
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_INSTANT;
+        for (LedgerEntry e : entries) {
+            pw.printf("%s,%s,\"%s\",%s,%s,%s,%s,\"%s\",\"%s\"%n",
+                    e.getId(),
+                    e.getAccountId(),
+                    account.getOwnerName(),
+                    formatter.format(e.getCreatedAt()),
+                    e.getEntryType(),
+                    e.getAmount().toPlainString(),
+                    e.getBalanceAfter().toPlainString(),
+                    e.getReferenceId() != null ? e.getReferenceId() : "",
+                    e.getDescription() != null ? e.getDescription() : ""
+            );
         }
-        return value;
+
+        pw.flush();
+        return sw.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public String exportStatementCsv(UUID id) {
+        return exportStatementCsv(id, null, null);
+    }
+
+    // Invariant FR-21: USER role can only access accounts matching their X-User-Id
+    private void validateOwnership(Account account, UUID requestingUserId, String role) {
+        if ("ADMIN".equalsIgnoreCase(role) || requestingUserId == null) {
+            return;
+        }
+        if (account.getOwnerUserId() != null && !account.getOwnerUserId().equals(requestingUserId)) {
+            throw new ForbiddenException("Access denied: You do not have permission to view or manage this account");
+        }
     }
 }

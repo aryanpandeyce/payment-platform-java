@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout, setMockModeState } from '../store/authSlice';
 import { setMockMode } from '../services/api';
-import { ShieldCheck, LogOut, Radio, Server, Layers, Sun, Moon, Database } from 'lucide-react';
+import { ShieldCheck, LogOut, Radio, Server, Layers, Sun, Moon, Database, Shield } from 'lucide-react';
 
 export default function Navbar({ onOpenArch, onOpenAudit }) {
   const dispatch = useDispatch();
-  const { username, isMockMode } = useSelector(state => state.auth);
+  const { user, isMockMode } = useSelector(state => state.auth);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
@@ -27,14 +27,14 @@ export default function Navbar({ onOpenArch, onOpenAudit }) {
   return (
     <header style={{
       borderBottom: '1px solid var(--border-color)',
-      background: 'rgba(10, 14, 23, 0.8)',
+      background: 'rgba(10, 14, 23, 0.85)',
       backdropFilter: 'blur(12px)',
       position: 'sticky',
       top: 0,
       zIndex: 40
     }}>
       <div style={{
-        maxWidth: 1200,
+        maxWidth: 1240,
         margin: '0 auto',
         padding: '14px 20px',
         display: 'flex',
@@ -62,7 +62,7 @@ export default function Navbar({ onOpenArch, onOpenAudit }) {
               Apex<span style={{ color: 'var(--cyan)' }}>Pay</span>
             </h1>
             <p style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: 0 }}>
-              Event-Driven Payment Microservices
+              Event-Driven Banking Platform
             </p>
           </div>
         </div>
@@ -116,21 +116,28 @@ export default function Navbar({ onOpenArch, onOpenAudit }) {
             {isMockMode ? 'Mock Mode (GitHub Pages Safe)' : 'Live Microservices'}
           </button>
 
-          {/* User profile & Logout */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              👤 <strong style={{ color: 'var(--text-main)' }}>{username}</strong>
-            </span>
-            <button
-              onClick={() => dispatch(logout())}
-              className="btn btn-secondary"
-              style={{ padding: '6px 10px' }}
-              title="Logout"
-              aria-label="Logout"
-            >
-              <LogOut size={14} />
-            </button>
-          </div>
+          {/* User profile & Role Badge */}
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  {user.fullName || user.username}
+                </span>
+                <span className={`badge badge-${user.role}`} style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                  {user.role}
+                </span>
+              </div>
+              <button
+                onClick={() => dispatch(logout())}
+                className="btn btn-secondary"
+                style={{ padding: '6px 8px', marginLeft: 4 }}
+                title="Logout"
+                aria-label="Logout"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

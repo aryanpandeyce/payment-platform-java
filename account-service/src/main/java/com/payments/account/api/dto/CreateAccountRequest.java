@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.util.UUID;
 
 // DTO (Java record) - Account create karne ke liye incoming request
 @Schema(description = "Request payload to create a new customer bank account")
@@ -19,7 +20,10 @@ public record CreateAccountRequest(
         BigDecimal initialBalance,
 
         @Schema(description = "Three-letter ISO currency code", example = "INR", defaultValue = "INR")
-        String currency
+        String currency,
+
+        @Schema(description = "User ID who owns this account", example = "00000000-0000-0000-0000-000000000011")
+        UUID ownerUserId
 ) {
     public CreateAccountRequest {
         if (currency == null || currency.isBlank()) {
@@ -27,7 +31,11 @@ public record CreateAccountRequest(
         }
     }
 
+    public CreateAccountRequest(String ownerName, BigDecimal initialBalance, String currency) {
+        this(ownerName, initialBalance, currency, null);
+    }
+
     public CreateAccountRequest(String ownerName, BigDecimal initialBalance) {
-        this(ownerName, initialBalance, "INR");
+        this(ownerName, initialBalance, "INR", null);
     }
 }

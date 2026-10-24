@@ -301,7 +301,78 @@ Every service and operation handling money in this platform must adhere to the f
 
 ---
 
-### 2.10 Out of Scope for Section 2
+### 2.11 Identity & Access Management Service (identity-service)
+
+*Why this matters in a real payment company*: Identity is the bedrock of banking trust. A robust identity service guarantees that only verified individuals access their financial funds, enforces role separation between standard customers and administrative personnel, and guards against credential brute-forcing.
+
+#### FR-17: User Registration & Password Policy
+- **Specification**: The system shall allow new customers to register with username, email, full name, and a strong password. The registration endpoint exclusively creates accounts with the `USER` role. Passwords must be hashed using BCrypt (work factor 12) before persistence.
+- **Acceptance Criteria**:
+  - **Given** a registration request with username "rahul", email "rahul@apexpay.demo", full name "Rahul Sharma", and password meeting policy (min 8 characters, at least one uppercase letter, one lowercase letter, and one digit),
+  - **When** `POST /auth/register` is received,
+  - **Then** the user is created with status `ACTIVE`, role `USER`, failed login attempts initialized to 0, password securely hashed with BCrypt (strength 12), and HTTP 201 Created is returned.
+  - **Given** a password failing policy (e.g. "pass", less than 8 chars or missing uppercase/digit),
+  - **When** `POST /auth/register` is received,
+  - **Then** the request is rejected with HTTP 400 Bad Request and error code `VALIDATION_FAILED`.
+  - **Given** an existing username or email,
+  - **When** `POST /auth/register` is received,
+  - **Then** the request is rejected with HTTP 409 Conflict and error code `USER_ALREADY_EXISTS`.
+
+#### FR-18: Authentication & Dual-Token Issuance
+- **Specification**: The system shall authenticate users using username/password credentials and issue a short-lived access JWT (15 minutes validity) along with a long-lived refresh token (7 days validity). Failed attempts return generic error messages to prevent username enumeration.
+- **Acceptance Criteria**:
+  - **Given** valid credentials for an `ACTIVE` user,
+  - **When** `POST /auth/login` is received,
+  - **Then** `failed_login_attempts` is reset to 0, `last_login_at` is updated, an HMAC-SHA256 access JWT (claims: `sub`=userId, `username`, `role`) and a secure random refresh token (stored hashed) are generated and returned with HTTP 200 OK.
+  - **Given** invalid password or non-existent username,
+  - **When** `POST /auth/login` is received,
+  - **Then** the request is rejected with HTTP 401 Unauthorized and generic message `INVALID_CREDENTIALS` without disclosing whether the username exists.
+
+#### FR-19: Refresh Token Rotation & Session Revocation
+- **Specification**: The system shall support token renewal via refresh tokens. Every refresh operation must rotate the refresh token (issue a new refresh token and invalidate the old one). Logging out revokes the active refresh token.
+- **Acceptance Criteria**:
+  - **Given** an active, unexpired, non-revoked refresh token,
+  - **When** `POST /auth/refresh` is received,
+  - **Then** the existing refresh token is marked revoked, a new access JWT and new refresh token are returned with HTTP 200 OK.
+  - **Given** an expired, revoked, or non-matching refresh token,
+  - **When** `POST /auth/refresh` is received,
+  - **Then** the request is rejected with HTTP 401 Unauthorized and error code `INVALID_REFRESH_TOKEN`.
+  - **Given** an authenticated user session,
+  - **When** `POST /auth/logout` is received with the refresh token,
+  - **Then** the refresh token is marked revoked and HTTP 200 OK is returned.
+
+#### FR-20: Failed Login Tracking & Account Lockout
+- **Specification**: The system shall track consecutive failed login attempts and automatically transition user status to `LOCKED` upon 5 consecutive failures. Only an administrator can unlock a locked account.
+- **Acceptance Criteria**:
+  - **Given** an `ACTIVE` user with 4 prior failed login attempts,
+  - **When** a 5th incorrect password attempt is submitted,
+  - **Then** `failed_login_attempts` increments to 5, user status transitions to `LOCKED`, and the request returns HTTP 401 Unauthorized with error code `ACCOUNT_LOCKED`.
+  - **Given** a `LOCKED` user attempting login with correct credentials,
+  - **When** `POST /auth/login` is received,
+  - **Then** login is denied with HTTP 403 Forbidden and error code `ACCOUNT_LOCKED`.
+  - **Given** an administrator (`ADMIN` role),
+  - **When** `PATCH /api/users/{id}/status` is received with `{ "status": "ACTIVE" }`,
+  - **Then** the user status is updated to `ACTIVE`, `failed_login_attempts` is reset to 0, and HTTP 200 OK is returned.
+
+#### FR-21: Role-Based Access Control (RBAC) & Resource Ownership
+- **Specification**: The system shall enforce resource ownership and role-based permissions across all microservices:
+  - Standard `USER`: Can only create/view accounts owned by their `X-User-Id`, initiate transfers strictly FROM accounts they own, and view only their own payments and ledger entries.
+  - `ADMIN`: Can inspect all accounts, payments, ledger statements, audit logs, and user records. Admins CANNOT initiate payments from user accounts (no impersonation spending).
+  - Any unauthorized cross-user access returns HTTP 403 Forbidden with error code `FORBIDDEN`.
+- **Acceptance Criteria**:
+  - **Given** a user with ID `user-1`,
+  - **When** attempting to fetch `GET /api/accounts/{id}` where the account is owned by `user-2`,
+  - **Then** the service rejects the request with HTTP 403 Forbidden and error code `FORBIDDEN`.
+  - **Given** a user with ID `user-1`,
+  - **When** attempting to initiate a payment where `senderAccountId` belongs to `user-2`,
+  - **Then** the service rejects the transfer with HTTP 403 Forbidden and error code `FORBIDDEN`.
+  - **Given** an `ADMIN` user,
+  - **When** attempting to initiate a payment transfer,
+  - **Then** the service rejects the transfer with HTTP 403 Forbidden and error code `FORBIDDEN` (admins cannot spend user funds).
+
+---
+
+### 2.12 Out of Scope for Section 2
 - Scheduled or recurring payments (standing instructions).
 - Partial refunds and dispute/chargeback workflows.
 - International wire transfers and currency conversion.
@@ -327,8 +398,11 @@ Every service and operation handling money in this platform must adhere to the f
    - Distributed correlation ID (`X-Correlation-Id`) generated at the Gateway or HTTP client, propagated through HTTP headers, MDC logging, and Kafka message headers.
    - Centralized immutable append-only audit logging in MongoDB.
 5. **Security & Isolation**:
-   - Database-per-service pattern (PostgreSQL `account_db`, `payment_db`, MongoDB `audit_db`). No cross-service database access.
-   - Stateless HMAC-SHA256 JWT authentication at the API Gateway.
+   - Database-per-service pattern (PostgreSQL `account_db`, `payment_db`, `identity_db`, MongoDB `audit_db`). No cross-service database access.
+   - Stateless HMAC-SHA256 JWT authentication at the API Gateway with downstream role and user identity propagation (`X-User-Id`, `X-User-Role`, `X-User-Name`).
+   - BCrypt password hashing with strength 12.
+   - Dual-token lifecycle: Short-lived access JWT (15m) and single-use refresh token (7d) rotation.
+   - Gateway rate limiting on `/auth/login` to prevent credential brute-forcing.
    - Zero hardcoded secrets in source code; externalized via environment variables.
 
 ---
@@ -338,10 +412,12 @@ Every service and operation handling money in this platform must adhere to the f
 ```mermaid
 graph TD
     Client["Client / React Frontend (Vite)"] -->|HTTP / JWT| Gateway["API Gateway (Port 8090)"]
+    Gateway -->|/auth/**, /api/users/**| IdSvc["Identity Service (Port 8084)"]
     Gateway -->|/api/accounts/**| AccSvc["Account Service (Port 8085)"]
     Gateway -->|/api/payments/**| PaySvc["Payment Service (Port 8086)"]
     Gateway -->|/api/audit-logs/**| NotifSvc["Notification & Audit Service (Port 8088)"]
 
+    IdSvc -->|JDBC| IdDB[("PostgreSQL: identity_db<br/>users, refresh_tokens")]
     PaySvc -->|JDBC| PayDB[("PostgreSQL: payment_db<br/>payments, outbox_events, payment_timeline")]
     AccSvc -->|JDBC| AccDB[("PostgreSQL: account_db<br/>accounts, ledger_entries")]
     NotifSvc -->|Mongo Driver| AuditDB[("MongoDB: audit_db<br/>audit_logs")]
@@ -374,6 +450,7 @@ graph TD
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `id` | `UUID` | PRIMARY KEY | Unique account identifier |
+| `owner_user_id` | `UUID` | NULLABLE, INDEX | User ID from identity-service (RBAC owner) |
 | `owner_name` | `VARCHAR(255)` | NOT NULL | Customer name |
 | `balance` | `NUMERIC(19, 2)` | NOT NULL | Current available balance |
 | `version` | `BIGINT` | NOT NULL DEFAULT 0 | Optimistic locking token |
@@ -452,27 +529,123 @@ graph TD
 
 ---
 
+### 5.4 `identity_db` (PostgreSQL)
+
+#### `users`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Unique user identifier |
+| `username` | `VARCHAR(100)` | NOT NULL UNIQUE | Unique login handle |
+| `email` | `VARCHAR(255)` | NOT NULL UNIQUE | Verified email address |
+| `full_name` | `VARCHAR(255)` | NOT NULL | Customer legal name |
+| `password_hash` | `VARCHAR(255)` | NOT NULL | BCrypt hash (cost factor 12) |
+| `role` | `VARCHAR(50)` | NOT NULL DEFAULT 'USER' | `USER` or `ADMIN` |
+| `status` | `VARCHAR(50)` | NOT NULL DEFAULT 'ACTIVE' | `ACTIVE` or `LOCKED` |
+| `failed_login_attempts`| `INT` | NOT NULL DEFAULT 0 | Failed login attempt counter |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Registration timestamp |
+| `last_login_at` | `TIMESTAMPTZ` | NULLABLE | Most recent successful login |
+
+#### `refresh_tokens`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `UUID` | PRIMARY KEY | Refresh token UUID |
+| `user_id` | `UUID` | NOT NULL, FK -> users(id) | Associated user |
+| `token_hash` | `VARCHAR(255)` | NOT NULL | SHA-256 hash of refresh token |
+| `expires_at` | `TIMESTAMPTZ` | NOT NULL | Expiration timestamp (7 days) |
+| `revoked` | `BOOLEAN` | NOT NULL DEFAULT FALSE | Whether token is revoked |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | Issuance timestamp |
+
+---
+
 ## 6. API Specification
 
-### 6.1 Authentication (`/auth`)
+### 6.1 Authentication & Identity (`/auth` & `/api/users`)
+
+#### `POST /auth/register`
+- **Request Body**:
+```json
+{
+  "username": "rahul.sharma",
+  "email": "rahul.sharma@apexpay.demo",
+  "fullName": "Rahul Sharma",
+  "password": "Password123"
+}
+```
+- **Response (201 Created)**:
+```json
+{
+  "id": "u1000000-0000-0000-0000-000000000001",
+  "username": "rahul.sharma",
+  "email": "rahul.sharma@apexpay.demo",
+  "fullName": "Rahul Sharma",
+  "role": "USER",
+  "status": "ACTIVE",
+  "createdAt": "2026-10-24T14:00:00Z"
+}
+```
 
 #### `POST /auth/login`
 - **Request Body**:
 ```json
 {
-  "username": "admin",
-  "password": "password"
+  "username": "aryan.pandey",
+  "password": "Password123"
 }
 ```
 - **Response (200 OK)**:
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
-  "expiresIn": 86400,
-  "username": "admin"
+  "expiresIn": 900,
+  "refreshToken": "rt-7f1a3...",
+  "user": {
+    "id": "u0000000-0000-0000-0000-000000000001",
+    "username": "aryan.pandey",
+    "email": "aryan.pandey@apexpay.demo",
+    "fullName": "Aryan Pandey",
+    "role": "ADMIN"
+  }
 }
 ```
+
+#### `POST /auth/refresh`
+- **Request Body**:
+```json
+{
+  "refreshToken": "rt-7f1a3..."
+}
+```
+- **Response (200 OK)**:
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "refreshToken": "rt-9b2c4..."
+}
+```
+
+#### `POST /auth/logout`
+- **Request Body**:
+```json
+{
+  "refreshToken": "rt-9b2c4..."
+}
+```
+- **Response (200 OK)**: `{"message": "Logged out successfully"}`
+
+#### `GET /api/users/me`
+- **Headers**: `Authorization: Bearer <accessToken>`
+- **Response (200 OK)**: UserProfileResponse object.
+
+#### `GET /api/users` (ADMIN only)
+- **Headers**: `Authorization: Bearer <accessToken>`
+- **Response (200 OK)**: List of `UserResponse` objects.
+
+#### `PATCH /api/users/{id}/status` (ADMIN only)
+- **Request Body**: `{"status": "ACTIVE"}` or `{"status": "LOCKED"}`
+- **Response (200 OK)**: Updated `UserResponse` object.
 
 ---
 
@@ -677,11 +850,18 @@ All services return standardized JSON error representations:
 | 400 Bad Request | `SAME_ACCOUNT_TRANSFER` | Sender and receiver account IDs are identical |
 | 400 Bad Request | `VALIDATION_FAILED` | Jakarta Bean Validation constraint violation |
 | 401 Unauthorized | `UNAUTHORIZED` | Missing, invalid, or expired JWT token |
+| 401 Unauthorized | `INVALID_CREDENTIALS` | Invalid username or password |
+| 401 Unauthorized | `INVALID_REFRESH_TOKEN` | Expired, revoked, or invalid refresh token |
+| 403 Forbidden | `FORBIDDEN` | Access denied due to RBAC or resource ownership mismatch |
+| 403 Forbidden | `ACCOUNT_LOCKED` | Account locked due to repeated failed logins |
 | 404 Not Found | `ACCOUNT_NOT_FOUND` | Account ID does not exist in `accounts` table |
 | 404 Not Found | `PAYMENT_NOT_FOUND` | Payment ID does not exist in `payments` table |
+| 404 Not Found | `USER_NOT_FOUND` | User ID does not exist in `users` table |
 | 409 Conflict | `INSUFFICIENT_FUNDS` | Debit requested exceeds current available balance |
 | 409 Conflict | `IDEMPOTENCY_PAYLOAD_MISMATCH` | Reused idempotency key with modified transfer parameters |
 | 409 Conflict | `INVALID_STATE_TRANSITION` | Attempted mutation of terminal payment (`SETTLED` / `FAILED`) |
+| 409 Conflict | `USER_ALREADY_EXISTS` | Registration with already taken username or email |
+| 429 Too Many Requests | `RATE_LIMIT_EXCEEDED` | Request rate limit exceeded on authentication endpoints |
 
 ### 9.3 Edge Cases & Distributed Guards
 - **Broker Downtime**: Payment Service writes both payment record and `OutboxEvent` in one Postgres transaction. Even if Kafka is down, events are polled and published once Kafka restores.
@@ -735,5 +915,11 @@ All services return standardized JSON error representations:
 | **FR-14**: Gateway JWT & Routing | `JwtAuthenticationFilter.java`, `JwtUtil.java` | `AuthControllerTest.java`, `JwtUtilTest.java` |
 | **FR-15**: Double-Click Form | `PaymentForm.jsx`, `ConfirmationModal.jsx` | `PaymentForm.jsx` |
 | **FR-16**: Live Dashboard & Stepper | `TransactionList.jsx`, `StatusStepperModal.jsx`, `SpendingChart.jsx` | `App.jsx`, `TransactionList.jsx` |
+| **FR-17**: User Registration | `UserService.register`, `User.java` | `UserServiceTest.java`, `AuthControllerTest.java` |
+| **FR-18**: Auth & Dual Token | `AuthService.login`, `JwtTokenProvider.java` | `AuthServiceTest.java`, `AuthControllerTest.java` |
+| **FR-19**: Refresh Token Rotation | `AuthService.refreshToken`, `RefreshTokenRepository.java` | `AuthServiceTest.java`, `AuthControllerTest.java` |
+| **FR-20**: Failed Login & Lockout | `AuthService.handleFailedLogin`, `User.lock` | `UserServiceTest.java`, `UserControllerTest.java` |
+| **FR-21**: RBAC & Ownership | `AccountSecurityEvaluator.java`, `PaymentSecurityEvaluator.java` | `AccountRbacIntegrationTest.java`, `PaymentRbacIntegrationTest.java` |
+
 
 

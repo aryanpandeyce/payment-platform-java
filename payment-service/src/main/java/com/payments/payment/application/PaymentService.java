@@ -44,9 +44,14 @@ public class PaymentService {
         this.objectMapper = objectMapper;
     }
 
-    // FR-5: Initiate payment with Idempotency Key
+    // FR-5 & FR-21: Initiate payment with Idempotency Key and RBAC checks
     @Transactional
-    public InitiationResult initiatePayment(String idempotencyKey, InitiatePaymentRequest request) {
+    public InitiationResult initiatePayment(String idempotencyKey, InitiatePaymentRequest request, UUID requestingUserId, String role) {
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            // Invariant FR-21: Admin cannot spend a user's money (no impersonated transfers)
+            throw new ForbiddenException("Administrators are prohibited from initiating transfers from user accounts. Impersonated spending is strictly forbidden.");
+        }
+
         if (idempotencyKey == null || idempotencyKey.trim().isEmpty()) {
             throw new IllegalArgumentException("Idempotency-Key header is required");
         }
@@ -67,20 +72,21 @@ public class PaymentService {
 
             if (sameSender && sameReceiver && sameAmount) {
                 // Exact same payload: Return existing payment with 200 OK
-                return new InitiationResult(PaymentResponse.from(existing, getTimeline(existing.getId())), false);
+                return new InitiationResult(PaymentResponse.from(existing, getTimelineInternal(existing.getId())), false);
             } else {
                 // Same key with different payload: 409 Conflict
                 throw new IdempotencyPayloadMismatchException(idempotencyKey.trim());
             }
         }
 
-        // New Payment aggregate creation
+        // New Payment aggregate creation with initiating userId
         Payment payment = new Payment(
                 idempotencyKey.trim(),
                 request.senderAccountId(),
                 request.receiverAccountId(),
                 request.amount(),
-                request.currency()
+                request.currency(),
+                requestingUserId
         );
         Payment savedPayment = paymentRepository.save(payment);
 
@@ -116,36 +122,73 @@ public class PaymentService {
             throw new RuntimeException("Failed to serialize outbox event payload", e);
         }
 
-        return new InitiationResult(PaymentResponse.from(savedPayment, getTimeline(savedPayment.getId())), true);
+        return new InitiationResult(PaymentResponse.from(savedPayment, getTimelineInternal(savedPayment.getId())), true);
+    }
+
+    public InitiationResult initiatePayment(String idempotencyKey, InitiatePaymentRequest request) {
+        return initiatePayment(idempotencyKey, request, null, null);
+    }
+
+    // FR-7 & FR-21: Query payment by ID with RBAC check
+    @Transactional(readOnly = true)
+    public PaymentResponse getPayment(UUID id, UUID requestingUserId, String role) {
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new PaymentNotFoundException(id));
+        validatePaymentAccess(payment, requestingUserId, role);
+        return PaymentResponse.from(payment, getTimelineInternal(payment.getId()));
     }
 
     @Transactional(readOnly = true)
     public PaymentResponse getPayment(UUID id) {
-        Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new PaymentNotFoundException(id));
-        return PaymentResponse.from(payment, getTimeline(payment.getId()));
+        return getPayment(id, null, null);
+    }
+
+    // FR-21: List all payments with RBAC (Admin sees all; User sees only their own payments)
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getAllPayments(UUID requestingUserId, String role) {
+        if ("ADMIN".equalsIgnoreCase(role) || requestingUserId == null) {
+            return paymentRepository.findAll().stream()
+                    .map(p -> PaymentResponse.from(p, getTimelineInternal(p.getId())))
+                    .collect(Collectors.toList());
+        }
+        Specification<Payment> spec = (root, query, cb) -> cb.equal(root.get("userId"), requestingUserId);
+        return paymentRepository.findAll(spec).stream()
+                .map(p -> PaymentResponse.from(p, getTimelineInternal(p.getId())))
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<PaymentResponse> getAllPayments() {
-        return paymentRepository.findAll().stream()
-                .map(p -> PaymentResponse.from(p, getTimeline(p.getId())))
-                .collect(Collectors.toList());
+        return getAllPayments(null, null);
     }
 
-    // Phase B: Timeline entries for a payment
+    // Phase B: Timeline entries for a payment with RBAC check
+    @Transactional(readOnly = true)
+    public List<TimelineEntryResponse> getTimeline(UUID paymentId, UUID requestingUserId, String role) {
+        getPayment(paymentId, requestingUserId, role);
+        return getTimelineInternal(paymentId);
+    }
+
     @Transactional(readOnly = true)
     public List<TimelineEntryResponse> getTimeline(UUID paymentId) {
+        return getTimeline(paymentId, null, null);
+    }
+
+    private List<TimelineEntryResponse> getTimelineInternal(UUID paymentId) {
         return paymentTimelineRepository.findByPaymentIdOrderByTimestampAsc(paymentId)
                 .stream()
                 .map(TimelineEntryResponse::from)
                 .toList();
     }
 
-    // Phase B: Search, Filter, Pagination
+    // Phase B: Search, Filter, Pagination with RBAC
     @Transactional(readOnly = true)
-    public Page<PaymentResponse> searchPayments(PaymentStatus status, Instant from, Instant to, String search, Pageable pageable) {
+    public Page<PaymentResponse> searchPayments(PaymentStatus status, Instant from, Instant to, String search, Pageable pageable, UUID requestingUserId, String role) {
         Specification<Payment> spec = Specification.where(null);
+
+        if (!"ADMIN".equalsIgnoreCase(role) && requestingUserId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("userId"), requestingUserId));
+        }
 
         if (status != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
@@ -172,7 +215,12 @@ public class PaymentService {
         }
 
         return paymentRepository.findAll(spec, pageable)
-                .map(p -> PaymentResponse.from(p, getTimeline(p.getId())));
+                .map(p -> PaymentResponse.from(p, getTimelineInternal(p.getId())));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PaymentResponse> searchPayments(PaymentStatus status, Instant from, Instant to, String search, Pageable pageable) {
+        return searchPayments(status, from, to, search, pageable, null, null);
     }
 
     // State machine status updates + timeline tracking
@@ -183,7 +231,7 @@ public class PaymentService {
         payment.validate();
         Payment updated = paymentRepository.save(payment);
         paymentTimelineRepository.save(new PaymentTimeline(id, PaymentStatus.VALIDATED, Instant.now(), null));
-        return PaymentResponse.from(updated, getTimeline(id));
+        return PaymentResponse.from(updated, getTimelineInternal(id));
     }
 
     @Transactional
@@ -193,7 +241,7 @@ public class PaymentService {
         payment.settle();
         Payment updated = paymentRepository.save(payment);
         paymentTimelineRepository.save(new PaymentTimeline(id, PaymentStatus.SETTLED, Instant.now(), null));
-        return PaymentResponse.from(updated, getTimeline(id));
+        return PaymentResponse.from(updated, getTimelineInternal(id));
     }
 
     @Transactional
@@ -203,6 +251,15 @@ public class PaymentService {
         payment.fail(reason);
         Payment updated = paymentRepository.save(payment);
         paymentTimelineRepository.save(new PaymentTimeline(id, PaymentStatus.FAILED, Instant.now(), reason));
-        return PaymentResponse.from(updated, getTimeline(id));
+        return PaymentResponse.from(updated, getTimelineInternal(id));
+    }
+
+    private void validatePaymentAccess(Payment payment, UUID requestingUserId, String role) {
+        if ("ADMIN".equalsIgnoreCase(role) || requestingUserId == null) {
+            return;
+        }
+        if (payment.getUserId() != null && !payment.getUserId().equals(requestingUserId)) {
+            throw new ForbiddenException("Access denied: You do not have permission to view this payment");
+        }
     }
 }
