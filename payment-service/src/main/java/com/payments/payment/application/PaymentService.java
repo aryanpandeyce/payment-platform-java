@@ -147,7 +147,7 @@ public class PaymentService {
             );
             outboxRepository.save(outboxEvent);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize outbox event payload", e);
+            throw new IllegalStateException("Failed to serialize outbox event payload", e);
         }
 
         return new InitiationResult(PaymentResponse.from(savedPayment, getTimelineInternal(savedPayment.getId())), true);
