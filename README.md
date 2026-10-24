@@ -1,17 +1,31 @@
 # Payment Platform (Java)
 
 [![CI/CD Pipeline](https://github.com/aryanpandeyce/payment-platform-java/actions/workflows/ci.yml/badge.svg)](https://github.com/aryanpandeyce/payment-platform-java/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://www.oracle.com/java/technologies/downloads/#java21)
 [![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4.4-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft-black.svg)](https://kafka.apache.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-7.0-green.svg)](https://www.mongodb.com/)
-[![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev/)
 
-Live demo: https://aryanpandeyce.github.io/payment-platform-java/
+**Live GitHub Pages Demo**: [https://aryanpandeyce.github.io/payment-platform-java/](https://aryanpandeyce.github.io/payment-platform-java/)
 
-A resilient, event-driven banking transaction and payment processing microservices platform built for global payment operations. Designed to demonstrate enterprise patterns including **Choreographed Saga**, **Transactional Outbox**, **Idempotent APIs**, and **Append-Only Auditing**.
+A production-grade, event-driven banking transaction and payment processing microservices platform built for global payment operations. Designed to demonstrate enterprise distributed systems patterns: **Choreographed Saga**, **Transactional Outbox**, **Strict Idempotency Keys**, **Flyway Database Migrations**, **Dead-Letter Recovery (DLT)**, and **Append-Only Auditing**.
 
+---
+
+## 📸 User Interface Preview
+
+![ApexPay Modern Fintech Dashboard](docs/screenshots/dashboard.jpg)
+
+The platform features a modern fintech interface with:
+- **Available Balances Grid**: Instant ledger account balances in INR with one-click UUID copy and transaction ledger review.
+- **Double-Click Protected Transfer Form**: Pre-flight review modal, account lookup, quick amount chips, and client-generated UUID `Idempotency-Key` preview.
+- **Live Lifecycle Stepper**: Real-time status progression (`INITIATED` $\rightarrow$ `VALIDATED` $\rightarrow$ `SETTLED` or `FAILED`) tracking fraud validation and atomic ledger settlement.
+- **Spending & Volume Analytics**: Interactive Recharts area chart summarizing real-time transaction velocity and total settled volume.
+- **Dark & Light Mode**: Accessible design system with custom CSS tokens, keyboard navigation, and toast notifications.
+- **Admin MongoDB Audit Trail**: Searchable event history with distributed correlation ID tracing (`X-Correlation-Id`).
 
 ---
 
@@ -24,20 +38,20 @@ flowchart TD
     end
 
     subgraph GatewayLayer["API Gateway"]
-        GW["Spring Cloud Gateway\n(Port 8090)\n[JWT Auth & Dynamic Routing]"]
+        GW["Spring Cloud Gateway\n(Port 8090)\n[JWT Auth & Correlation ID Injection]"]
     end
 
     subgraph Services["Core Microservices Layer"]
-        ACC["Account Service\n(Port 8085)\n[Balances, Debits & Credits]"]
-        PAY["Payment Service\n(Port 8086)\n[State Machine & Idempotency]"]
-        FRD["Fraud Service\n(Port 8087)\n[Amount & Velocity Rules]"]
-        NOTIF["Notification Service\n(Port 8088)\n[Alerts & Audit Consumer]"]
+        ACC["Account Service\n(Port 8085)\n[Ledger, Debits, Credits & Statement CSV]"]
+        PAY["Payment Service\n(Port 8086)\n[State Machine, Idempotency & Timeline]"]
+        FRD["Fraud Service\n(Port 8087)\n[Amount Limit & Velocity Window]"]
+        NOTIF["Notification & Audit Service\n(Port 8088)\n[Alerts & MongoDB Audit Trail]"]
     end
 
     subgraph DataStore["Databases & Event Log"]
-        ACC_DB[("PostgreSQL\naccount_db\n(Port 5433)")]
-        PAY_DB[("PostgreSQL\npayment_db\n(Port 5433)")]
-        AUDIT_DB[("MongoDB\naudit_db\n(Port 27017)")]
+        ACC_DB[("PostgreSQL\naccount_db\n(Port 5433)\naccounts, ledger_entries")]
+        PAY_DB[("PostgreSQL\npayment_db\n(Port 5433)\npayments, outbox_events, payment_timeline")]
+        AUDIT_DB[("MongoDB\naudit_db\n(Port 27017)\naudit_logs")]
         OUTBOX[("Transactional\nOutbox Table")]
     end
 
@@ -46,11 +60,13 @@ flowchart TD
         T2["Topic: payment-validated"]
         T3["Topic: payment-settled"]
         T4["Topic: payment-failed"]
+        TDLT["Topics: *.DLT (Dead-Letter)"]
     end
 
     UI -->|REST + Bearer Token| GW
     GW -->|/api/accounts/**| ACC
     GW -->|/api/payments/**| PAY
+    GW -->|/api/audit-logs/**| NOTIF
     ACC --> ACC_DB
     PAY --> PAY_DB
     PAY --> OUTBOX
@@ -73,142 +89,127 @@ flowchart TD
     T3 -.-> NOTIF
     T4 -.-> NOTIF
     NOTIF --> AUDIT_DB
+
+    %% Dead-letter recoverer
+    FRD -.->|Retries Exhausted| TDLT
+    ACC -.->|Retries Exhausted| TDLT
+    PAY -.->|Retries Exhausted| TDLT
 ```
 
 ---
 
 ## 🚀 Port & Service Registry
 
-| Service | Port (Host) | Technology | Responsibility | Storage |
+| Service | Port (Host) | Technology | Swagger UI / Endpoint | Storage |
 | :--- | :---: | :--- | :--- | :--- |
-| **API Gateway** | `8090` | Spring Cloud Gateway | Routing, JWT validation, `/auth/login` | Stateless |
-| **Account Service** | `8085` | Spring Boot 3 + JPA | Account management, atomic debit & credit, settlement | PostgreSQL (`account_db`) |
-| **Payment Service** | `8086` | Spring Boot 3 + JPA | Idempotent transfer initiation, status state machine | PostgreSQL (`payment_db`) |
-| **Fraud Service** | `8087` | Spring Boot 3 + Kafka | High-value limit checks (₹50k), velocity rate checks | In-Memory / Distributed |
-| **Notification Service** | `8088` | Spring Boot 3 + Mongo | Mock SMS/Email dispatch, append-only event auditing | MongoDB (`audit_db`) |
-| **Frontend Dashboard** | `5173` | React 19 + Redux Toolkit | Transaction list, transfer form, live status polling | LocalStorage / Mock |
-| **PostgreSQL** | `5433` | PostgreSQL 16 | Relational persistence for accounts, payments & outbox | Host mapped |
-| **Apache Kafka** | `9092` | Apache Kafka (KRaft) | Event backbone for asynchronous microservices choreography | Event Log |
-| **MongoDB** | `27017` | MongoDB 7.0 | Append-only document store for regulatory audit events | NoSQL |
+| **API Gateway** | `8090` | Spring Cloud Gateway | `/auth/login` | Stateless |
+| **Account Service** | `8085` | Spring Boot 3 + JPA | `http://localhost:8085/swagger-ui.html` | PostgreSQL (`account_db`) |
+| **Payment Service** | `8086` | Spring Boot 3 + JPA | `http://localhost:8086/swagger-ui.html` | PostgreSQL (`payment_db`) |
+| **Fraud Service** | `8087` | Spring Boot 3 + Kafka | `http://localhost:8087/swagger-ui.html` | In-Memory / Distributed |
+| **Notification Service** | `8088` | Spring Boot 3 + Mongo | `http://localhost:8088/swagger-ui.html` | MongoDB (`audit_db`) |
+| **Frontend Dashboard** | `5173` | React 18 + Redux Toolkit | `http://localhost:5173` | LocalStorage / Mock |
+| **PostgreSQL** | `5433` | PostgreSQL 16 Alpine | Database Engine | Host mapped |
+| **Apache Kafka** | `9092` | Apache Kafka 3.8.1 (KRaft) | Event Stream Broker | Event Log |
+| **MongoDB** | `27017` | MongoDB 7.0 | Document Store | NoSQL |
 
 ---
 
 ## 💡 Key Architectural Patterns
 
 1. **Transactional Outbox Pattern**:
-   - Ensures atomicity between payment persistence and Kafka event emission.
-   - Payments and event payloads are committed to PostgreSQL in the exact same database transaction.
-   - A dedicated `@Scheduled` background worker safely polls unpublished events and dispatches them to Kafka, guaranteeing *at-least-once* delivery without two-phase commit overhead.
-2. **Strict Idempotency (`Idempotency-Key`)**:
-   - Every payment initiation requires a unique `Idempotency-Key` header.
-   - Enforced at the database level with a `UNIQUE` constraint on `idempotency_key`.
-   - Re-submitting identical transfer payloads returns the cached transaction, shielding the customer from double-debits during mobile network timeouts.
-   - Submitting an altered request body with an existing key returns an immediate `409 Conflict`.
-3. **Choreographed Saga with Compensation**:
-   - Asynchronous settlement across independent bounded contexts (`account-service` and `payment-service`) without a central coordinator bottleneck.
-   - If a credit operation fails after a successful debit, an automated compensation transaction reverses the debit atomically.
-4. **Finite State Machine Lifecycle**:
-   - Terminal status isolation: Transitions are strictly constrained (`INITIATED` $\rightarrow$ `VALIDATED` $\rightarrow$ `SETTLED` or `FAILED`).
-   - Terminal states (`SETTLED` / `FAILED`) are immutable and cannot be overwritten.
-5. **Regulatory Append-Only Audit Logging**:
-   - The Notification Service consumes all Kafka lifecycle topics (`payment-initiated`, `payment-validated`, `payment-settled`, `payment-failed`) and logs timestamped events directly into MongoDB for audit compliance.
+   - Commits payment state and the domain event payload in the exact same database transaction in PostgreSQL.
+   - Background worker (`OutboxPoller`) polls unpublished events and publishes them to Kafka with zero dual-write inconsistencies.
+2. **Strict Idempotency Keys**:
+   - Enforced with database `UNIQUE` constraint on `idempotency_key`. Replays return cached responses immediately without secondary debits; modified payloads return `409 Conflict`.
+3. **Choreographed Saga & Compensations**:
+   - Decoupled event choreography without a central coordinator bottleneck.
+   - Settlement listener executes atomic sender debit and receiver credit; if an account is missing or blocked, automated compensation refunds the funds and marks payment `FAILED`.
+4. **Retry & Dead-Letter Topics (`DLT`)**:
+   - Consumer message listeners are configured with `DeadLetterPublishingRecoverer` and `DefaultErrorHandler` (2 retries, 1-second backoff before routing to `<topic>.DLT`).
+5. **Distributed Correlation Tracking**:
+   - Every inbound request receives or generates `X-Correlation-Id`, which propagates across Spring Web filters, MDC logs, and Kafka record headers.
+6. **Immutable Ledger Entries & Statement Export**:
+   - Every debit, credit, opening deposit, and transfer writes an immutable row in `ledger_entries`, supporting CSV export on demand.
+7. **Flyway Migrations**:
+   - Version-controlled schema evolutions (`V1__...`, `V2__...`) replacing fragile `ddl-auto: update`.
 
 ---
 
 ## 🛠️ Quickstart: Running with Docker Compose
 
-To start the complete infrastructure and all 6 services with a single command:
+To launch the full ecosystem (all 5 microservices, Kafka, PostgreSQL, MongoDB, and React dashboard):
 
 ```bash
 docker compose up --build -d
 ```
 
-Check the health and running status of all containers:
+Verify that all 9 containers are running:
 
 ```bash
 docker compose ps
 ```
 
-Access the user interface:
-- **Web Dashboard**: [http://localhost:5173](http://localhost:5173) (Demo credentials: `user1` / `password123`)
+Open your browser:
+- **Web Dashboard**: [http://localhost:5173](http://localhost:5173) (Demo credentials: `admin` / `password`)
 - **API Gateway**: [http://localhost:8090](http://localhost:8090)
+- **Account Service Swagger**: [http://localhost:8085/swagger-ui.html](http://localhost:8085/swagger-ui.html)
+- **Payment Service Swagger**: [http://localhost:8086/swagger-ui.html](http://localhost:8086/swagger-ui.html)
 
 ---
 
-## 💻 Running Services Locally
+## 💻 Running Services Locally (PowerShell)
 
-You can launch all infrastructure and microservices with our helper script:
+You can launch all infrastructure and microservices with our automated helper script:
 
 ```powershell
 .\run-local.ps1
 ```
 
-Or manually:
+Or step-by-step:
+
 ```powershell
-# 1. Start core infrastructure containers (Postgres, Kafka, Mongo)
+# 1. Start core infrastructure containers
 docker compose up -d postgres kafka mongodb
 
-# 2. Set user timezone for Postgres compatibility
-$env:JAVA_TOOL_OPTIONS = "-Duser.timezone=Asia/Kolkata"
-
-# 3. Launch microservices in separate terminals
+# 2. Launch microservices in separate PowerShell terminals
 cd account-service;       .\mvnw.cmd spring-boot:run
 cd payment-service;       .\mvnw.cmd spring-boot:run
 cd fraud-service;         .\mvnw.cmd spring-boot:run
 cd notification-service;  .\mvnw.cmd spring-boot:run
 cd api-gateway;           .\mvnw.cmd spring-boot:run
 
-# 4. Launch React Frontend
-cd frontend;              npm install; npm run dev
+# 3. Launch React Frontend
+cd frontend;              npm run dev
 ```
-
----
-
-## ⚡ 2-Minute PowerShell Demo
-
-Run this rapid verification flow in PowerShell:
-
-```powershell
-# 1. Obtain JWT from API Gateway
-$loginBody = @{ username = "user1"; password = "password123" } | ConvertTo-Json
-$token = (Invoke-RestMethod -Uri "http://localhost:8090/auth/login" -Method Post -Body $loginBody -ContentType "application/json").token
-$headers = @{ "Authorization" = "Bearer $token" }
-
-# 2. Create Rahul's Account (₹10,000) & Priya's Account (₹5,000)
-$rahul = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ ownerName = "Rahul Sharma"; initialBalance = 10000.00; currency = "INR" } | ConvertTo-Json) -ContentType "application/json"
-$priya = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ ownerName = "Priya Patel"; initialBalance = 5000.00; currency = "INR" } | ConvertTo-Json) -ContentType "application/json"
-
-# 3. Execute Transfer (Rahul -> Priya: ₹500)
-$key = [System.Guid]::NewGuid().ToString()
-$payHeaders = @{ "Authorization" = "Bearer $token"; "Idempotency-Key" = $key }
-$payBody = @{ senderAccountId = $rahul.id; receiverAccountId = $priya.id; amount = 500.00; currency = "INR" } | ConvertTo-Json
-$payment = Invoke-RestMethod -Uri "http://localhost:8090/api/payments" -Method Post -Headers $payHeaders -Body $payBody -ContentType "application/json"
-
-# 4. Wait for Kafka Settlement & Check Status
-Start-Sleep -Seconds 2
-Invoke-RestMethod -Uri "http://localhost:8090/api/payments/$($payment.id)" -Method Get -Headers $headers
-```
-
-For the complete interactive walkthrough including fraud breach testing and MongoDB audit checks, see [docs/DEMO.md](docs/DEMO.md).
 
 ---
 
 ## 🧪 Testing
 
-Each microservice includes unit tests for domain business rules and integration/smoke tests using in-memory H2 databases:
+The repository features comprehensive test coverage across all layers:
+- **Unit Tests**: Domain aggregates (`AccountTest`, `PaymentTest`), fraud rule engines (`FraudCheckServiceTest`), and JWT cryptographic signing (`JwtUtilTest`).
+- **Integration Tests**: REST APIs, Bean Validation, status state machines, and H2 database persistence.
+- **Testcontainers Tests**: Real PostgreSQL and Apache Kafka integration tests verifying payment idempotency and end-to-end event choreography (`PaymentIdempotencyTestcontainersTest`, `KafkaFlowTestcontainersTest`).
+
+To run the complete test suite across all services:
 
 ```powershell
-# Run tests across all services using the Maven wrapper:
 .\mvnw.cmd test -B
 ```
 
 ---
 
-## 🔍 Known Limitations & Production Enhancements
+## 🤖 How This Was Built (Spec-Driven, AI-Assisted)
 
-To keep this learning codebase transparent, fast, and easy to study, the following trade-offs were intentionally made:
+This project was built using **Spec-Driven Development (SDD)** with AI pair-programming assistance:
+1. **Source of Truth First**: Every functional requirement, financial invariant rule, error code, and distributed boundary was strictly defined beforehand in [docs/SSD.md](docs/SSD.md) before writing implementation code.
+2. **AI-Assisted Pair Programming**: Developed in collaboration with Google DeepMind's Antigravity AI coding assistant, adhering to strict architectural constraints (immutable Java records, DDD package boundaries, Flyway migrations, zero Lombok, no hardcoded secrets).
+3. **Test-First Methodology**: Each domain capability was verified through automated tests prior to final phase integration.
+4. **Architecture Decision Records**: Key distributed systems trade-offs are documented transparently in [docs/adr/](docs/adr/).
 
-1. **In-Memory Fraud Velocity Tracking**: The velocity check in `fraud-service` uses a local in-memory sliding window (`ConcurrentHashMap`). In a distributed multi-instance deployment, this should be backed by a distributed cache like Redis or Hazelcast.
-2. **Simplified Saga Choreography**: Event flow uses choreography across Kafka topics. While highly decoupled, complex enterprise sagas spanning dozens of compensation branches often benefit from an orchestrator (e.g., Temporal or Camunda).
-3. **Hardcoded Demo JWT Users**: Authentication in the API Gateway authenticates demo credentials configured via environment variables. In production, this would integrate with an OAuth2 / OIDC provider such as Keycloak, Okta, or AWS Cognito.
-4. **Single Currency**: Currently restricted to INR transactions without currency conversion logic.
+---
+
+## 📄 License & Contributing
+
+- Distributed under the [MIT License](LICENSE).
+- Contribution guidelines and pull request instructions are detailed in [CONTRIBUTING.md](CONTRIBUTING.md).

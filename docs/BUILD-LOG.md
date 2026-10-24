@@ -184,6 +184,13 @@ Every file created in the project and the reason it exists.
 - `docs/adr/ADR-003-idempotency-keys.md`: Architecture Decision Record explaining client UUID idempotency keys for transfer deduplication.
 - `docs/adr/ADR-004-mongodb-for-audit.md`: Architecture Decision Record explaining MongoDB for centralized immutable audit logs.
 
+## Phase E: Repo polish
+- `README.md`: Polished with architecture diagram, UI screenshot preview, service port registry, quickstart guides (Docker Compose + local PowerShell), testing instructions, and honest "How this was built" section noting AI-assisted, spec-driven development.
+- `LICENSE`: Added standard MIT License.
+- `CONTRIBUTING.md`: Added contribution guidelines, TDD standards, Conventional Commit conventions, and financial invariant rules.
+- `docs/screenshots/dashboard.jpg`: Visual dashboard mockup preview asset.
+
+
 
 
 
