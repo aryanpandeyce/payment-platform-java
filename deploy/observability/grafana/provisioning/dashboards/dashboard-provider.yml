@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'ApexPay Dashboards'
+    orgId: 1
+    folder: 'ApexPay'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

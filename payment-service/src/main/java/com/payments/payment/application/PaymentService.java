@@ -31,17 +31,44 @@ public class PaymentService {
     private final OutboxRepository outboxRepository;
     private final PaymentTimelineRepository paymentTimelineRepository;
     private final ObjectMapper objectMapper;
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
+    private final io.micrometer.core.instrument.Counter paymentsInitiatedCounter;
+    private final io.micrometer.core.instrument.Counter paymentsSettledCounter;
+    private final io.micrometer.core.instrument.Timer settlementTimer;
 
     public record InitiationResult(PaymentResponse response, boolean isNew) {}
 
     public PaymentService(PaymentRepository paymentRepository,
                           OutboxRepository outboxRepository,
                           PaymentTimelineRepository paymentTimelineRepository,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper,
+                          io.micrometer.core.instrument.MeterRegistry meterRegistry) {
         this.paymentRepository = paymentRepository;
         this.outboxRepository = outboxRepository;
         this.paymentTimelineRepository = paymentTimelineRepository;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry != null ? meterRegistry : new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        this.paymentsInitiatedCounter = io.micrometer.core.instrument.Counter.builder("payments_initiated_total")
+                .description("Total number of initiated payment transactions")
+                .register(this.meterRegistry);
+        this.paymentsSettledCounter = io.micrometer.core.instrument.Counter.builder("payments_settled_total")
+                .description("Total number of successfully settled payments")
+                .register(this.meterRegistry);
+        this.settlementTimer = io.micrometer.core.instrument.Timer.builder("payment_settlement_duration_seconds")
+                .description("Latency distribution for payment settlement")
+                .register(this.meterRegistry);
+
+        // Outbox pending events gauge
+        io.micrometer.core.instrument.Gauge.builder("outbox_pending_events", () -> (double) this.outboxRepository.countByStatus("PENDING"))
+                .description("Number of pending events in transactional outbox waiting to be published")
+                .register(this.meterRegistry);
+    }
+
+    public PaymentService(PaymentRepository paymentRepository,
+                          OutboxRepository outboxRepository,
+                          PaymentTimelineRepository paymentTimelineRepository,
+                          ObjectMapper objectMapper) {
+        this(paymentRepository, outboxRepository, paymentTimelineRepository, objectMapper, new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     }
 
     // FR-5 & FR-21: Initiate payment with Idempotency Key and RBAC checks
@@ -89,6 +116,7 @@ public class PaymentService {
                 requestingUserId
         );
         Payment savedPayment = paymentRepository.save(payment);
+        paymentsInitiatedCounter.increment();
 
         // Record initial timeline entry
         paymentTimelineRepository.save(new PaymentTimeline(
@@ -241,6 +269,10 @@ public class PaymentService {
         payment.settle();
         Payment updated = paymentRepository.save(payment);
         paymentTimelineRepository.save(new PaymentTimeline(id, PaymentStatus.SETTLED, Instant.now(), null));
+        paymentsSettledCounter.increment();
+        if (payment.getCreatedAt() != null) {
+            settlementTimer.record(java.time.Duration.between(payment.getCreatedAt(), Instant.now()));
+        }
         return PaymentResponse.from(updated, getTimelineInternal(id));
     }
 
@@ -251,6 +283,8 @@ public class PaymentService {
         payment.fail(reason);
         Payment updated = paymentRepository.save(payment);
         paymentTimelineRepository.save(new PaymentTimeline(id, PaymentStatus.FAILED, Instant.now(), reason));
+        String failureTag = (reason != null && !reason.isBlank()) ? reason : "UNKNOWN";
+        meterRegistry.counter("payments_failed_total", "reason", failureTag).increment();
         return PaymentResponse.from(updated, getTimelineInternal(id));
     }
 

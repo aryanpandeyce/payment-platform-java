@@ -1,0 +1,38 @@
+groups:
+  - name: apexpay-alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Microservice instance {{ $labels.instance }} (job: {{ $labels.job }}) is down"
+          description: "Service has been unreachable for more than 30 seconds."
+
+      - alert: PaymentHighErrorRate
+        expr: rate(payments_failed_total[5m]) / (rate(payments_initiated_total[5m]) + 0.001) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High payment failure rate detected (> 5%)"
+          description: "Payment failure rate exceeds 5% over a 5-minute sliding window."
+
+      - alert: OutboxPendingBacklog
+        expr: outbox_pending_events > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Transactional outbox event backlog"
+          description: "Over 50 pending events in outbox table waiting for Kafka publication."
+
+      - alert: KafkaDLTDetected
+        expr: increase(kafka_dlt_messages_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dead-Letter Topic (DLT) messages detected"
+          description: "Poison-pill or unprocessable Kafka events routed to DLT after maximum retries."

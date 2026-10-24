@@ -31,6 +31,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final BCryptPasswordEncoder passwordEncoder;
     private final long refreshTokenExpirationSeconds;
+    private final io.micrometer.core.instrument.Counter loginFailuresCounter;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public AuthService(
@@ -38,6 +39,7 @@ public class AuthService {
             RefreshTokenRepository refreshTokenRepository,
             PasswordPolicy passwordPolicy,
             JwtTokenProvider jwtTokenProvider,
+            io.micrometer.core.instrument.MeterRegistry meterRegistry,
             @Value("${jwt.refresh-token-expiration-seconds:604800}") long refreshTokenExpirationSeconds) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -46,6 +48,20 @@ public class AuthService {
         this.refreshTokenExpirationSeconds = refreshTokenExpirationSeconds;
         // Invariant: BCrypt cost factor 12 for high hashing security
         this.passwordEncoder = new BCryptPasswordEncoder(12);
+        io.micrometer.core.instrument.MeterRegistry registry =
+                meterRegistry != null ? meterRegistry : new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        this.loginFailuresCounter = io.micrometer.core.instrument.Counter.builder("auth_login_failures_total")
+                .description("Total number of failed user login attempts")
+                .register(registry);
+    }
+
+    public AuthService(
+            UserRepository userRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            PasswordPolicy passwordPolicy,
+            JwtTokenProvider jwtTokenProvider,
+            long refreshTokenExpirationSeconds) {
+        this(userRepository, refreshTokenRepository, passwordPolicy, jwtTokenProvider, new io.micrometer.core.instrument.simple.SimpleMeterRegistry(), refreshTokenExpirationSeconds);
     }
 
     // FR-17: New user registration with password policy check
@@ -80,15 +96,20 @@ public class AuthService {
     @Transactional
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
+                .orElseThrow(() -> {
+                    loginFailuresCounter.increment();
+                    return new InvalidCredentialsException("Invalid username or password");
+                });
 
         if (user.isLocked()) {
+            loginFailuresCounter.increment();
             throw new AccountLockedException("Account is locked due to repeated failed login attempts. Please contact an administrator.");
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             user.recordFailedLogin();
             userRepository.save(user);
+            loginFailuresCounter.increment();
             if (user.isLocked()) {
                 throw new AccountLockedException("Account is locked due to repeated failed login attempts. Please contact an administrator.");
             }

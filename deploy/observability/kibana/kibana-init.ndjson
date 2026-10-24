@@ -1,0 +1,3 @@
+{"id":"apexpay-logs","type":"data-view","attributes":{"title":"apexpay-*","name":"ApexPay Logs","timeFieldName":"@timestamp"}}
+{"id":"apexpay-error-logs","type":"search","attributes":{"title":"ApexPay Correlation Tracing and Errors","description":"Filter logs by correlationId, userId, and error levels","columns":["@timestamp","service","level","correlationId","userId","message"],"sort":[["@timestamp","desc"]]}}
+{"id":"apexpay-log-analytics","type":"dashboard","attributes":{"title":"ApexPay — Centralized Log Analytics","description":"Centralized ELK dashboard for microservice logs and distributed traces","panelsJSON":"[]"}}

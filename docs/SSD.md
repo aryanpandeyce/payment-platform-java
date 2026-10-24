@@ -431,6 +431,27 @@ Every service and operation handling money in this platform must adhere to the f
    - Production-grade Kubernetes primitives: Deployments, Services, ConfigMaps, Secrets, HorizontalPodAutoscalers (HPA), and PodDisruptionBudgets (PDB).
    - Zero-trust NetworkPolicy architecture: Default deny ingress with explicit ingress whitelist rules (Ingress -> Gateway -> Microservices -> Data Stores).
    - OpenShift `restricted-v2` Security Context Constraint (SCC) compliance: non-root execution (`runAsNonRoot: true`), arbitrary user ID tolerance (`runAsUser` omitted or randomized), `allowPrivilegeEscalation: false`, and `readOnlyRootFilesystem: true` with temporary in-memory volume mounts for `/tmp`.
+11. **Comprehensive Observability & Metrics (Prometheus + Grafana)**:
+   - Real-time Prometheus metrics scraped across all `/actuator/prometheus` microservice endpoints.
+   - Custom Micrometer business counters, gauges, and timers:
+     - `payments_initiated_total`: Total initiated payment transactions.
+     - `payments_settled_total`: Total successfully settled payments.
+     - `payments_failed_total{reason}`: Failed payments labeled by failure cause (INSUFFICIENT_FUNDS, FRAUD_REJECTED, etc.).
+     - `payment_settlement_duration_seconds`: Timer measuring payment transaction latency.
+     - `fraud_rejections_total{rule}`: Fraud triggers labeled by rule (AMOUNT_EXCEEDED, VELOCITY_EXCEEDED).
+     - `outbox_pending_events`: Gauge of pending transactional outbox events.
+     - `kafka_dlt_messages_total`: Counter of dead-letter topic payloads.
+     - `auth_login_failures_total`: Counter of failed identity authentication attempts.
+   - Grafana Dashboards-as-Code:
+     1. Platform Overview (HTTP throughput, p95 latency, 5xx errors, JVM memory, HikariCP connection pools).
+     2. Payments Business (Volume, success rate, failure breakdown, outbox lag, DLT counts).
+     3. Kafka & Consumer Lag (Topic partition lag, producer publish rate, consumer throughput).
+   - Prometheus Alert Rules: `ServiceDown`, `PaymentHighErrorRate`, `OutboxPendingBacklog`, `KafkaDLTDetected`.
+12. **Structured Log Telemetry & Data Masking (ELK)**:
+   - Standardized JSON structured logging using `logstash-logback-encoder` across all Spring Boot services.
+   - Automatic correlation through MDC context: `correlationId`, `userId`, `service`, `level`, `@timestamp`.
+   - Automated Data Protection / Masking: Zero plain-text logging of secrets, passwords, Bearer tokens, or full account numbers (`DataMaskingUtil` and log pattern masking with test guards).
+   - Log aggregation topology via Fluent Bit / Filebeat into Elasticsearch 8.x with Kibana saved search dashboards.
 
 ---
 

@@ -17,12 +17,23 @@ public class KafkaRetryConfig {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaRetryConfig.class);
 
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
+
+    public KafkaRetryConfig(io.micrometer.core.instrument.MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry != null ? meterRegistry : new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    }
+
+    public KafkaRetryConfig() {
+        this(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+    }
+
     @Bean
     public CommonErrorHandler kafkaCommonErrorHandler(KafkaOperations<Object, Object> template) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template,
                 (record, ex) -> {
                     log.error("Failed message on topic '{}' after retries. Forwarding to DLT. Error: {}",
                             record.topic(), ex.getMessage());
+                    meterRegistry.counter("kafka_dlt_messages_total").increment();
                     return new org.apache.kafka.common.TopicPartition(record.topic() + ".DLT", -1);
                 });
 

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <springProperty scope="context" name="springAppName" source="spring.application.name" defaultValue="notification-service"/>
+
+    <!-- Structured JSON logging for Container / Kubernetes / ELK ingestion -->
+    <springProfile name="prod,docker,k8s,observability">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp>
+                        <timeZone>UTC</timeZone>
+                    </timestamp>
+                    <logLevel/>
+                    <pattern>
+                        <pattern>
+                            {
+                                "service": "${springAppName}",
+                                "correlationId": "%mdc{correlationId:-N/A}",
+                                "userId": "%mdc{userId:-N/A}"
+                            }
+                        </pattern>
+                    </pattern>
+                    <loggerName/>
+                    <threadName/>
+                    <message/>
+                    <stackTrace/>
+                </providers>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Standard human-readable console logging for local testing -->
+    <springProfile name="!prod &amp; !docker &amp; !k8s &amp; !observability">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

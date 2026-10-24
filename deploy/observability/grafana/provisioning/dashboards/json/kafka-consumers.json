@@ -1,0 +1,86 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "Kafka Consumer Listener Throughput",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(spring_kafka_listener_seconds_count[1m])) by (job, name)",
+          "legendFormat": "{{ job }} - {{ name }}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "title": "Consumer Processing Duration (Avg)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(spring_kafka_listener_seconds_sum[1m])) by (job, name) / (sum(rate(spring_kafka_listener_seconds_count[1m])) by (job, name) + 0.0001)",
+          "legendFormat": "{{ job }} avg duration",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "title": "DLT Topic Message Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(kafka_dlt_messages_total[1m]) or vector(0)",
+          "legendFormat": "DLT Ingestion Rate",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["apexpay", "kafka", "streaming"],
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "ApexPay — Kafka and Consumers Dashboard",
+  "uid": "apexpay-kafka-consumers"
+}
