@@ -1,0 +1,23 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: api-gateway-test
+
+  cloud:
+    gateway:
+      routes:
+        - id: account-service-test
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/accounts/**
+
+jwt:
+  secret: supersecretjwtkeythatisatleast256bitslongforhmacsha256signing
+  expiration-ms: 3600000
+
+auth:
+  demo-user:
+    username: admin
+    password: password

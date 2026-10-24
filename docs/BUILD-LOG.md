@@ -85,3 +85,17 @@ Every file created in the project and the reason it exists.
 - `notification-service/src/main/java/com/payments/notification/listener/AuditEventListener.java`: Kafka consumer capturing all domain events and persisting them into MongoDB.
 - `notification-service/src/test/java/com/payments/notification/NotificationServiceApplicationTests.java`: Context loading smoke test for notification service.
 - `notification-service/src/test/java/com/payments/notification/listener/AuditEventListenerTest.java`: Unit tests verifying event deserialization and MongoDB audit document persistence.
+
+## Phase 5: api-gateway + JWT (FR-14)
+- `api-gateway/pom.xml`: Maven build file for Spring Cloud Gateway with reactive Netty and JJWT.
+- `api-gateway/src/main/resources/application.yml`: Configuration routing `/api/accounts/**` and `/api/payments/**` on port 8090.
+- `api-gateway/src/test/resources/application.yml`: Test configuration for api-gateway.
+- `api-gateway/src/main/java/com/payments/gateway/ApiGatewayApplication.java`: Main entry point for Spring Cloud Gateway.
+- `api-gateway/src/main/java/com/payments/gateway/security/JwtUtil.java`: Utility generating HMAC-SHA256 signed JWT tokens and validating claims.
+- `api-gateway/src/main/java/com/payments/gateway/security/JwtAuthenticationFilter.java`: GlobalFilter enforcing Bearer token authentication and injecting `X-User-Id`.
+- `api-gateway/src/main/java/com/payments/gateway/dto/LoginRequest.java`: DTO for POST /auth/login credentials.
+- `api-gateway/src/main/java/com/payments/gateway/dto/LoginResponse.java`: DTO returning JWT token and metadata.
+- `api-gateway/src/main/java/com/payments/gateway/controller/AuthController.java`: Reactive REST controller authenticating demo credentials and issuing JWTs.
+- `api-gateway/src/test/java/com/payments/gateway/ApiGatewayApplicationTests.java`: Context loading smoke test for api-gateway.
+- `api-gateway/src/test/java/com/payments/gateway/security/JwtUtilTest.java`: Unit tests verifying JWT signing, claim extraction, and tamper detection.
+- `api-gateway/src/test/java/com/payments/gateway/controller/AuthControllerTest.java`: WebTestClient integration test verifying POST /auth/login with valid and invalid credentials.
