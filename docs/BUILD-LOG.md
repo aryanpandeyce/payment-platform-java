@@ -99,3 +99,23 @@ Every file created in the project and the reason it exists.
 - `api-gateway/src/test/java/com/payments/gateway/ApiGatewayApplicationTests.java`: Context loading smoke test for api-gateway.
 - `api-gateway/src/test/java/com/payments/gateway/security/JwtUtilTest.java`: Unit tests verifying JWT signing, claim extraction, and tamper detection.
 - `api-gateway/src/test/java/com/payments/gateway/controller/AuthControllerTest.java`: WebTestClient integration test verifying POST /auth/login with valid and invalid credentials.
+
+## Phase 6: frontend (FR-15, 16)
+- `frontend/package.json`: Vite, React 18, Redux Toolkit, and Lucide React icons manifest.
+- `frontend/vite.config.js`: Vite build configuration with relative base for GitHub Pages and proxy to Gateway.
+- `frontend/index.html`: Main HTML entry point with Plus Jakarta Sans and JetBrains Mono fonts.
+- `frontend/.gitignore`: Ignores node_modules and build artifacts in frontend directory.
+- `frontend/src/index.css`: Curated dark-mode fintech design system with glassmorphic cards and glowing badges.
+- `frontend/src/main.jsx`: React entry point wrapping the root component in Redux Provider.
+- `frontend/src/App.jsx`: Main dashboard coordinating 2-second live polling, authentication state, and modals.
+- `frontend/src/services/api.js`: API client supporting both live Gateway endpoints and full offline mock event choreography.
+- `frontend/src/store/index.js`: Centralized Redux Toolkit store.
+- `frontend/src/store/authSlice.js`: Redux slice managing JWT token, demo credentials, and mock mode toggle.
+- `frontend/src/store/accountsSlice.js`: Redux slice tracking account ledger balances and active statuses.
+- `frontend/src/store/paymentsSlice.js`: Redux slice managing payment submission flight state and real-time transaction history.
+- `frontend/src/components/Navbar.jsx`: Header featuring system branding, mock mode indicator, and logout.
+- `frontend/src/components/LoginView.jsx`: Glassmorphic authentication card with 1-click demo login.
+- `frontend/src/components/AccountCards.jsx`: Visual grid of bank accounts with balances, copy ID button, and creation modal.
+- `frontend/src/components/PaymentForm.jsx`: Double-click protected form with unique Idempotency-Key preview and quick amount chips.
+- `frontend/src/components/TransactionList.jsx`: Live auto-refreshing transaction table with pulsing status badges and failure reasons.
+- `frontend/src/components/ArchitectureModal.jsx`: Interactive slideover explaining the 7-step event-driven architecture.
