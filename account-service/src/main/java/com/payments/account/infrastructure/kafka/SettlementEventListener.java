@@ -67,8 +67,8 @@ public class SettlementEventListener {
                     event.paymentId(), event.senderAccountId(), event.receiverAccountId(), event.amount());
 
             try {
-                // FR-10: Atomic transfer in ONE database transaction
-                accountService.transfer(event.senderAccountId(), event.receiverAccountId(), event.amount());
+                // FR-10: Atomic transfer in ONE database transaction with paymentId reference
+                accountService.transfer(event.senderAccountId(), event.receiverAccountId(), event.amount(), event.paymentId().toString());
 
                 // Settlement successful
                 PaymentSettledEvent settledEvent = new PaymentSettledEvent(

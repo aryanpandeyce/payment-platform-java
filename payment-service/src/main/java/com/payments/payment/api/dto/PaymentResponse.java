@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 // DTO (Java record) - Payment details and lifecycle response
@@ -39,9 +40,16 @@ public record PaymentResponse(
         Instant createdAt,
 
         @Schema(description = "Last status update timestamp")
-        Instant updatedAt
+        Instant updatedAt,
+
+        @Schema(description = "Status transition timeline")
+        List<TimelineEntryResponse> timeline
 ) {
     public static PaymentResponse from(Payment payment) {
+        return from(payment, List.of());
+    }
+
+    public static PaymentResponse from(Payment payment, List<TimelineEntryResponse> timeline) {
         return new PaymentResponse(
                 payment.getId(),
                 payment.getIdempotencyKey(),
@@ -52,7 +60,8 @@ public record PaymentResponse(
                 payment.getStatus(),
                 payment.getFailureReason(),
                 payment.getCreatedAt(),
-                payment.getUpdatedAt()
+                payment.getUpdatedAt(),
+                timeline != null ? timeline : List.of()
         );
     }
 }

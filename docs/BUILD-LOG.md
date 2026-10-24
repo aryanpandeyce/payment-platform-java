@@ -144,4 +144,26 @@ Every file created in the project and the reason it exists.
 - Integrated `springdoc-openapi` (Swagger UI / OpenAPI 3.0 v2.8.5) across all services.
 - Added fast Testcontainers integration tests in `payment-service` (`PaymentIdempotencyTestcontainersTest` and `KafkaFlowTestcontainersTest`).
 
+## Phase B: Extra features
+- `account-service/src/main/resources/db/migration/V2__create_ledger_entries_table.sql`: Flyway migration creating `ledger_entries` table.
+- `account-service/src/main/java/com/payments/account/domain/LedgerEntry.java`: Aggregate ledger entity tracking debit/credit amounts, running balances, and transaction references.
+- `account-service/src/main/java/com/payments/account/domain/EntryType.java`: Enum representing `DEBIT` and `CREDIT`.
+- `account-service/src/main/java/com/payments/account/infrastructure/persistence/LedgerEntryRepository.java`: JPA repository for querying account transactions chronologically.
+- `account-service/src/main/java/com/payments/account/api/dto/LedgerEntryResponse.java`: DTO record exposing transaction history entries.
+- `account-service/src/main/java/com/payments/account/application/AccountService.java`: Updated to record immutable ledger entries on account opening, debit, credit, and transfers, plus CSV statement generator.
+- `account-service/src/main/java/com/payments/account/api/AccountController.java`: Added `GET /api/accounts`, `GET /api/accounts/{id}/transactions`, and `GET /api/accounts/{id}/statement/csv`.
+- `payment-service/src/main/resources/db/migration/V2__create_payment_timeline_table.sql`: Flyway migration creating `payment_timeline` table.
+- `payment-service/src/main/java/com/payments/payment/domain/PaymentTimeline.java`: Entity capturing status transition history and failure reasons.
+- `payment-service/src/main/java/com/payments/payment/infrastructure/persistence/PaymentTimelineRepository.java`: Repository querying payment lifecycle progression.
+- `payment-service/src/main/java/com/payments/payment/api/dto/TimelineEntryResponse.java`: DTO record representing timeline entries.
+- `payment-service/src/main/java/com/payments/payment/api/dto/PaymentResponse.java`: Enhanced with `List<TimelineEntryResponse> timeline`.
+- `payment-service/src/main/java/com/payments/payment/application/PaymentService.java`: Added search by ID/idempotencyKey, date range filtering, status filtering, pagination, and status timeline recording.
+- `payment-service/src/main/java/com/payments/payment/api/PaymentController.java`: Added pagination, filter by status, filter by date, search, and `GET /api/payments/{id}/timeline`.
+- Kafka Retry & Dead-letter Topic (`DLT`): Configured `DeadLetterPublishingRecoverer` and `DefaultErrorHandler` with 2 retries and 1s backoff across `payment-service`, `account-service`, and `fraud-service`.
+- `notification-service/src/main/java/com/payments/notification/api/dto/AuditLogResponse.java`: DTO record for MongoDB audit log entries.
+- `notification-service/src/main/java/com/payments/notification/application/AuditLogService.java`: Dynamic criteria query service for audit log searches.
+- `notification-service/src/main/java/com/payments/notification/api/AuditLogController.java`: REST controller exposing `GET /api/audit-logs` with eventType, correlationId, aggregateId, and date filters.
+- `api-gateway/src/main/resources/application.yml` and `docker-compose.yml`: Routed `/api/audit-logs/**` to `notification-service`.
+
+
 

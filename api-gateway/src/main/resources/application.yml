@@ -21,6 +21,12 @@ spring:
           predicates:
             - Path=/api/payments/**
 
+        # Route 3: Notification Service / Audit Logs (Port 8088)
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8088}
+          predicates:
+            - Path=/api/audit-logs/**
+
 jwt:
   secret: ${JWT_SECRET:supersecretjwtkeythatisatleast256bitslongforhmacsha256signing}
   expiration-ms: 86400000 # 24 hours

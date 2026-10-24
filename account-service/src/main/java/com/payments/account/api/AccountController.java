@@ -3,16 +3,19 @@ package com.payments.account.api;
 import com.payments.account.api.dto.AccountResponse;
 import com.payments.account.api.dto.BalanceResponse;
 import com.payments.account.api.dto.CreateAccountRequest;
+import com.payments.account.api.dto.LedgerEntryResponse;
 import com.payments.account.api.dto.TransferAmountRequest;
 import com.payments.account.application.AccountService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -34,6 +37,14 @@ public class AccountController {
     public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
         AccountResponse response = accountService.createAccount(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // List all accounts
+    @GetMapping
+    @Operation(summary = "List Accounts", description = "Retrieves all accounts in the system")
+    @ApiResponse(responseCode = "200", description = "List of accounts retrieved")
+    public ResponseEntity<List<AccountResponse>> getAllAccounts() {
+        return ResponseEntity.ok(accountService.getAllAccounts());
     }
 
     // FR-2: Retrieve account details
@@ -73,5 +84,26 @@ public class AccountController {
     @ApiResponse(responseCode = "404", description = "Account not found")
     public ResponseEntity<AccountResponse> credit(@PathVariable UUID id, @Valid @RequestBody TransferAmountRequest request) {
         return ResponseEntity.ok(accountService.credit(id, request.amount()));
+    }
+
+    // Phase B: Get ledger transaction history
+    @GetMapping("/{id}/transactions")
+    @Operation(summary = "Get Transactions", description = "Retrieves ledger entries and transaction history for an account")
+    @ApiResponse(responseCode = "200", description = "Transactions retrieved")
+    @ApiResponse(responseCode = "404", description = "Account not found")
+    public ResponseEntity<List<LedgerEntryResponse>> getTransactions(@PathVariable UUID id) {
+        return ResponseEntity.ok(accountService.getTransactions(id));
+    }
+
+    // Phase B: Export account statement as CSV
+    @GetMapping(value = "/{id}/statement/csv", produces = "text/csv")
+    @Operation(summary = "Export Statement CSV", description = "Exports an account's transaction history in CSV format")
+    @ApiResponse(responseCode = "200", description = "CSV statement generated")
+    @ApiResponse(responseCode = "404", description = "Account not found")
+    public ResponseEntity<String> exportStatementCsv(@PathVariable UUID id) {
+        String csv = accountService.exportStatementCsv(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"statement_" + id + ".csv\"")
+                .body(csv);
     }
 }
