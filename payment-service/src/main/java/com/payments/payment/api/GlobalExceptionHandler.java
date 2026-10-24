@@ -1,6 +1,6 @@
 package com.payments.payment.api;
 
-import com.payments.payment.api.dto.ErrorResponse;
+import com.payments.common.dto.ErrorResponse;
 import com.payments.payment.domain.ForbiddenException;
 import com.payments.payment.domain.IdempotencyPayloadMismatchException;
 import com.payments.payment.domain.InvalidStateTransitionException;

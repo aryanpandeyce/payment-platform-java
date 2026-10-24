@@ -404,6 +404,16 @@ Every service and operation handling money in this platform must adhere to the f
    - Dual-token lifecycle: Short-lived access JWT (15m) and single-use refresh token (7d) rotation.
    - Gateway rate limiting on `/auth/login` to prevent credential brute-forcing.
    - Zero hardcoded secrets in source code; externalized via environment variables.
+6. **Build System & Multi-Module Architecture**:
+   - Root parent POM (`packaging=pom`) with centralized `dependencyManagement` and `pluginManagement`.
+   - Strict Java 21 runtime and compiler enforcement via `maven-enforcer-plugin`.
+   - Surefire unit test and Failsafe integration test separation.
+   - Code coverage instrumentation via JaCoCo aggregated reporting.
+   - Unified build execution from root: `.\mvnw.cmd clean verify -B`.
+7. **Observability Probes & Business Metrics**:
+   - Standardized Spring Boot Actuator `/actuator/health` (liveness and readiness probes) across all microservices.
+   - Prometheus metrics endpoint `/actuator/prometheus` enabled on all services with custom business metrics.
+   - Actuator endpoints restricted to internal cluster network; blocked from public gateway routing.
 
 ---
 

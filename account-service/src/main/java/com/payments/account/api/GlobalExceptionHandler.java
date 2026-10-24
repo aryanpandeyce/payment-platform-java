@@ -1,6 +1,6 @@
 package com.payments.account.api;
 
-import com.payments.account.api.dto.ErrorResponse;
+import com.payments.common.dto.ErrorResponse;
 import com.payments.account.domain.AccountNotFoundException;
 import com.payments.account.domain.ForbiddenException;
 import com.payments.account.domain.InsufficientFundsException;

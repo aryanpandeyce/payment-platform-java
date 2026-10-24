@@ -1,6 +1,6 @@
 package com.payments.identity.exception;
 
-import com.payments.identity.dto.ErrorResponse;
+import com.payments.common.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
