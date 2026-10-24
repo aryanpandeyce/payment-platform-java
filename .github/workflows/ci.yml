@@ -72,6 +72,8 @@ jobs:
         run: npm run build
         env:
           VITE_USE_MOCK: "true"
+          VITE_BASE_PATH: "/payment-platform-java/"
+
 
       - name: Setup Pages
         if: github.ref == 'refs/heads/main'
