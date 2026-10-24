@@ -1,0 +1,13 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: notification-service-test
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/test_audit_db
+
+  kafka:
+    bootstrap-servers: localhost:9092

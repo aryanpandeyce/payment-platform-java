@@ -73,3 +73,15 @@ Every file created in the project and the reason it exists.
 - `payment-service/src/main/java/com/payments/payment/event/PaymentSettledEvent.java`: Event model for settled status updates.
 - `payment-service/src/main/java/com/payments/payment/event/PaymentFailedEvent.java`: Event model for failed status updates.
 - `payment-service/src/main/java/com/payments/payment/listener/PaymentStatusEventListener.java`: Idempotent consumer advancing payment state machine to VALIDATED, SETTLED, or FAILED.
+
+## Phase 4: notification-service + audit (FR-12, 13)
+- `notification-service/pom.xml`: Maven build file for notification and MongoDB audit logging service.
+- `notification-service/src/main/resources/application.yml`: Configuration for notification service on port 8088 with Kafka and MongoDB.
+- `notification-service/src/test/resources/application.yml`: Test configuration for notification service.
+- `notification-service/src/main/java/com/payments/notification/NotificationServiceApplication.java`: Main Spring Boot application entry point for notifications and audit logging.
+- `notification-service/src/main/java/com/payments/notification/domain/AuditLog.java`: MongoDB document entity for immutable append-only event trail.
+- `notification-service/src/main/java/com/payments/notification/repository/AuditLogRepository.java`: Spring Data MongoDB repository for persisting and querying audit log entries.
+- `notification-service/src/main/java/com/payments/notification/listener/NotificationEventListener.java`: Kafka consumer generating mock SMS/Email console logs for settled and failed payments.
+- `notification-service/src/main/java/com/payments/notification/listener/AuditEventListener.java`: Kafka consumer capturing all domain events and persisting them into MongoDB.
+- `notification-service/src/test/java/com/payments/notification/NotificationServiceApplicationTests.java`: Context loading smoke test for notification service.
+- `notification-service/src/test/java/com/payments/notification/listener/AuditEventListenerTest.java`: Unit tests verifying event deserialization and MongoDB audit document persistence.
