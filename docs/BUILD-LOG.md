@@ -132,4 +132,6 @@ Every file created in the project and the reason it exists.
 - `.github/workflows/ci.yml`: GitHub Actions CI/CD workflow running Maven tests across all microservices and deploying the React frontend to GitHub Pages.
 - `docs/DEMO.md`: 2-minute step-by-step PowerShell demo script verifying authentication, account creation, transfer settlement, idempotency, fraud breach, and MongoDB audits.
 - `README.md`: Comprehensive system documentation with Mermaid architecture diagram, port registry, patterns, quickstart instructions, and known limitations.
+- `run-local.ps1`: Automated PowerShell helper launching Docker Compose infrastructure and spawning each Spring Boot microservice in its own window.
+- `docs/LOCAL-TESTING.md`: Dedicated local testing guide with exact PowerShell commands and real controller JSON field names.
 

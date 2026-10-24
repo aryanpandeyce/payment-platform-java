@@ -132,10 +132,15 @@ Access the user interface:
 
 ---
 
-## 💻 Running Services Individually (Local Development)
+## 💻 Running Services Locally
 
-If running locally on Windows with PowerShell:
+You can launch all infrastructure and microservices with our helper script:
 
+```powershell
+.\run-local.ps1
+```
+
+Or manually:
 ```powershell
 # 1. Start core infrastructure containers (Postgres, Kafka, Mongo)
 docker compose up -d postgres kafka mongodb
@@ -144,11 +149,11 @@ docker compose up -d postgres kafka mongodb
 $env:JAVA_TOOL_OPTIONS = "-Duser.timezone=Asia/Kolkata"
 
 # 3. Launch microservices in separate terminals
-cd account-service;       mvn spring-boot:run
-cd payment-service;       mvn spring-boot:run
-cd fraud-service;         mvn spring-boot:run
-cd notification-service;  mvn spring-boot:run
-cd api-gateway;           mvn spring-boot:run
+cd account-service;       .\mvnw.cmd spring-boot:run
+cd payment-service;       .\mvnw.cmd spring-boot:run
+cd fraud-service;         .\mvnw.cmd spring-boot:run
+cd notification-service;  .\mvnw.cmd spring-boot:run
+cd api-gateway;           .\mvnw.cmd spring-boot:run
 
 # 4. Launch React Frontend
 cd frontend;              npm install; npm run dev
@@ -167,13 +172,13 @@ $token = (Invoke-RestMethod -Uri "http://localhost:8090/auth/login" -Method Post
 $headers = @{ "Authorization" = "Bearer $token" }
 
 # 2. Create Rahul's Account (₹10,000) & Priya's Account (₹5,000)
-$rahul = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ name = "Rahul Sharma"; email = "rahul@example.com"; initialBalance = 10000.00 } | ConvertTo-Json) -ContentType "application/json"
-$priya = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ name = "Priya Patel"; email = "priya@example.com"; initialBalance = 5000.00 } | ConvertTo-Json) -ContentType "application/json"
+$rahul = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ ownerName = "Rahul Sharma"; initialBalance = 10000.00; currency = "INR" } | ConvertTo-Json) -ContentType "application/json"
+$priya = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body (@{ ownerName = "Priya Patel"; initialBalance = 5000.00; currency = "INR" } | ConvertTo-Json) -ContentType "application/json"
 
 # 3. Execute Transfer (Rahul -> Priya: ₹500)
 $key = [System.Guid]::NewGuid().ToString()
 $payHeaders = @{ "Authorization" = "Bearer $token"; "Idempotency-Key" = $key }
-$payBody = @{ fromAccountId = $rahul.id; toAccountId = $priya.id; amount = 500.00; currency = "INR" } | ConvertTo-Json
+$payBody = @{ senderAccountId = $rahul.id; receiverAccountId = $priya.id; amount = 500.00; currency = "INR" } | ConvertTo-Json
 $payment = Invoke-RestMethod -Uri "http://localhost:8090/api/payments" -Method Post -Headers $payHeaders -Body $payBody -ContentType "application/json"
 
 # 4. Wait for Kafka Settlement & Check Status

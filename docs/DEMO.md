@@ -46,9 +46,9 @@ Create Rahul's account with ₹10,000 and Priya's account with ₹5,000:
 ```powershell
 # Create Rahul's Account
 $rahulBody = @{
-    name = "Rahul Sharma"
-    email = "rahul@example.com"
+    ownerName      = "Rahul Sharma"
     initialBalance = 10000.00
+    currency       = "INR"
 } | ConvertTo-Json
 
 $rahul = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body $rahulBody -ContentType "application/json"
@@ -57,9 +57,9 @@ Write-Host "Rahul's Account Created with ID: $rahulId, Balance: ₹$($rahul.bala
 
 # Create Priya's Account
 $priyaBody = @{
-    name = "Priya Patel"
-    email = "priya@example.com"
+    ownerName      = "Priya Patel"
     initialBalance = 5000.00
+    currency       = "INR"
 } | ConvertTo-Json
 
 $priya = Invoke-RestMethod -Uri "http://localhost:8090/api/accounts" -Method Post -Headers $headers -Body $priyaBody -ContentType "application/json"
@@ -82,10 +82,10 @@ $paymentHeaders = @{
 }
 
 $paymentBody = @{
-    fromAccountId = $rahulId
-    toAccountId = $priyaId
-    amount = 500.00
-    currency = "INR"
+    senderAccountId   = $rahulId
+    receiverAccountId = $priyaId
+    amount            = 500.00
+    currency          = "INR"
 } | ConvertTo-Json
 
 $payment = Invoke-RestMethod -Uri "http://localhost:8090/api/payments" -Method Post -Headers $paymentHeaders -Body $paymentBody -ContentType "application/json"
@@ -137,10 +137,10 @@ $fraudHeaders = @{
 }
 
 $fraudBody = @{
-    fromAccountId = $rahulId
-    toAccountId = $priyaId
-    amount = 75000.00
-    currency = "INR"
+    senderAccountId   = $rahulId
+    receiverAccountId = $priyaId
+    amount            = 75000.00
+    currency          = "INR"
 } | ConvertTo-Json
 
 $fraudPayment = Invoke-RestMethod -Uri "http://localhost:8090/api/payments" -Method Post -Headers $fraudHeaders -Body $fraudBody -ContentType "application/json"
