@@ -12,8 +12,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   backend-test:
@@ -79,6 +79,9 @@ jobs:
     name: Deploy Mock Dashboard to GitHub Pages
     if: github.ref == 'refs/heads/main'
     needs: build-frontend
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
